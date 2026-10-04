@@ -4,7 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="크로매틱">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#c8335e">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 </head>
 <body>
@@ -241,6 +247,23 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     <div class="row note">
       <span>1년 시작일</span>
       <input type="date" id="start" aria-label="1년 목표 시작일">
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="bkTitle">
+    <h2 id="bkTitle">기록 옮기기</h2>
+    <div class="note">다른 폰이나 새로 설치한 앱으로 기록을 옮길 때 써요. 횟수, 메모, 시작일이 모두 들어 있어요.</div>
+    <div class="row">
+      <button id="bkCopy">기록 복사하기</button>
+      <button id="bkOpen">기록 붙여넣기</button>
+    </div>
+    <div id="bkBox" class="caledit" hidden>
+      <textarea id="bkText" placeholder="복사한 기록을 여기에 붙여넣으세요"></textarea>
+      <div class="row">
+        <button class="save" id="bkLoad">불러오기</button>
+        <button id="bkClose">닫기</button>
+      </div>
+      <div class="note" id="bkMsg"></div>
     </div>
   </section>
 </div>
@@ -546,6 +569,29 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     if (document.activeElement !== $("todayMemo")) $("todayMemo").value = state.notes[t] || "";
   }
 
+  // ---------- 기록 옮기기 (백업 코드) ----------
+  $("bkCopy").onclick = async () => {
+    const code = "CHROMATIC5000:" + JSON.stringify({ start: state.start, days: state.days, notes: state.notes });
+    try { await navigator.clipboard.writeText(code); toast("기록을 복사했어요. 새 앱에서 '기록 붙여넣기'를 누르세요"); }
+    catch { $("bkBox").hidden = false; $("bkText").value = code; $("bkText").select(); $("bkMsg").textContent = "자동 복사가 안 돼서 아래 글자를 직접 복사해 주세요."; }
+  };
+  $("bkOpen").onclick = () => { $("bkBox").hidden = false; $("bkText").value = ""; $("bkMsg").textContent = ""; $("bkText").focus(); };
+  $("bkClose").onclick = () => { $("bkBox").hidden = true; bkArmed = false; $("bkLoad").textContent = "불러오기"; };
+  let bkArmed = false;
+  $("bkLoad").onclick = () => {
+    const t = $("bkText").value.trim().replace(/^CHROMATIC5000:/, "");
+    let d;
+    try { d = JSON.parse(t); if (!d || typeof d.days !== "object") throw 0; }
+    catch { $("bkMsg").textContent = "기록 코드가 아니에요. '기록 복사하기'로 복사한 글자 전체를 붙여넣어 주세요."; return; }
+    const n = Object.values(d.days).reduce((a, b) => a + (Number(b) || 0), 0);
+    if (!bkArmed) { bkArmed = true; $("bkLoad").textContent = "덮어쓰기 확인"; $("bkMsg").textContent = `${fmt(n)}회 기록이에요. 지금 이 기기의 기록을 이걸로 바꿔요. 한 번 더 누르면 불러와요.`; return; }
+    bkArmed = false; $("bkLoad").textContent = "불러오기";
+    const days = {}; for (const [k, v] of Object.entries(d.days)) if (/^\d{4}-\d{2}-\d{2}$/.test(k) && v > 0) days[k] = Math.min(999, Math.round(v));
+    const notes = {}; for (const [k, v] of Object.entries(d.notes || {})) if (/^\d{4}-\d{2}-\d{2}$/.test(k) && v) notes[k] = String(v).slice(0, 500);
+    state = { start: /^\d{4}-\d{2}-\d{2}$/.test(d.start || "") ? d.start : state.start, days, notes };
+    $("bkBox").hidden = true; render(); queueSave(); toast(`${fmt(n)}회 기록을 불러왔어요`);
+  };
+
   $("calPrev").onclick = () => { calMonth.setMonth(calMonth.getMonth() - 1); render(); };
   $("calNext").onclick = () => { calMonth.setMonth(calMonth.getMonth() + 1); render(); };
 
@@ -697,5 +743,8 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
 })();
 </script>
 
+<script>
+if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+</script>
 </body>
 </html>
