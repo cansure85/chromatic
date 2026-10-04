@@ -961,17 +961,12 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
   function drawTapBtn() { $("tapSnd").setAttribute("aria-pressed", tapOn); $("tapSnd").textContent = tapOn ? "🔔 소리 켜짐" : "🔕 소리 꺼짐"; }
   $("tapSnd").onclick = () => { tapOn = !tapOn; ls.set("tap.sound", tapOn); drawTapBtn(); if (tapOn) chime(hz(0), 0.35); };
   drawTapBtn();
-  // 별빛 같은 맑은 종소리: 부드럽게 시작해 길게 사라지고, 살짝 메아리가 남음
+  // 높고 짧은 맑은 종소리 (메아리 없음)
   let fx = null;
   function chimeOut() {
     if (fx) return fx;
     const out = ac.createGain(); out.gain.value = 0.9;
-    const dly = ac.createDelay(1); dly.delayTime.value = 0.19;
-    const fb = ac.createGain(); fb.gain.value = 0.22;
-    const tone = ac.createBiquadFilter(); tone.type = "lowpass"; tone.frequency.value = 5000;
-    const wet = ac.createGain(); wet.gain.value = 0.14;
-    out.connect(ac.destination);
-    out.connect(dly); dly.connect(tone).connect(fb).connect(dly); tone.connect(wet).connect(ac.destination);
+    out.connect(ac.destination);                                          // 메아리 없이 바로 출력
     return (fx = out);
   }
   function chime(freq, vol = 0.5, when = 0) {
@@ -981,13 +976,13 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     const env = ac.createGain();
     env.gain.setValueAtTime(0.0001, t);
     env.gain.linearRampToValueAtTime(vol, t + 0.003);                     // 빠르게 시작해 또렷하게
-    env.gain.exponentialRampToValueAtTime(vol * 0.35, t + 0.12);
-    env.gain.exponentialRampToValueAtTime(0.0001, t + 1.3);
+    env.gain.exponentialRampToValueAtTime(vol * 0.3, t + 0.06);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);              // 짧게 끝남
     env.connect(out);
-    [[1, 1], [2.0, 0.3], [3.0, 0.1], [1.002, 0.2]].forEach(([m, a]) => {     // 기본음 + 맑은 배음 + 아주 옅은 반짝임
+    [[1, 1], [2.0, 0.25], [3.0, 0.08]].forEach(([m, a]) => {     // 기본음 + 맑은 배음 + 아주 옅은 반짝임
       const o = ac.createOscillator(), g = ac.createGain();
       o.type = "sine"; o.frequency.value = freq * m; g.gain.value = a;
-      o.connect(g).connect(env); o.start(t); o.stop(t + 1.4);
+      o.connect(g).connect(env); o.start(t); o.stop(t + 0.4);
     });
     // 첫 순간의 '팅' 하는 맑은 울림 (아주 짧게)
     const hi = ac.createOscillator(), hg = ac.createGain();
@@ -997,7 +992,7 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
   }
   // 누를수록 별처럼 올라가는 오음 음계 (도 레 미 솔 라)
   const STAR = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21];
-  const hz = semi => 523.25 * Math.pow(2, semi / 12);   // 높은 도(C5) 기준
+  const hz = semi => 1046.5 * Math.pow(2, semi / 12);   // 한 옥타브 더 높은 도(C6) 기준
   function tapSound(n, v) {
     if (!tapOn) return;
     try {
