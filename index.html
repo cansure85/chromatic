@@ -71,6 +71,35 @@ input { background: var(--bg); border: 1px solid var(--line); border-radius: 10p
 .pace { font-size: 14px; }
 .pace.ahead { color: var(--ok); } .pace.behind { color: var(--accent); }
 
+/* 메트로놈 */
+.metro { display: grid; gap: 12px; }
+.bpm { font-family: var(--f-mono); font-size: 40px; line-height: 1; font-variant-numeric: tabular-nums; }
+.bpm small { font-size: 14px; color: var(--muted); }
+.beats { display: flex; gap: 8px; }
+.beats span { width: 16px; height: 16px; border-radius: 50%; background: var(--track); transition: background .05s; }
+.beats span.on { background: var(--mid); }
+.beats span.on.first { background: var(--accent); }
+.metro-play { min-width: 96px; font-weight: 600; }
+.metro-play.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+input[type=range] { width: 100%; accent-color: var(--accent); background: none; border: none; padding: 0; }
+.seg { display: flex; gap: 4px; }
+.seg button { padding: 6px 10px; font-size: 13px; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
+
+/* 달력 */
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal div { min-width: 0; aspect-ratio: 1; max-width: 100%; border-radius: 8px; background: var(--track); display: grid; grid-template-rows: auto 1fr; padding: 3px 4px; }
+.cal .dow { background: none; aspect-ratio: auto; text-align: center; font-size: 12px; color: var(--muted); padding: 0; display: block; }
+.cal .blank { background: none; }
+.cal .d { font-size: 10px; color: var(--muted); line-height: 1.1; }
+.cal .n { font: 500 15px var(--f-mono); font-variant-numeric: tabular-nums; align-self: center; justify-self: center; color: var(--ink); }
+.cal .some { background: var(--accent-soft); }
+.cal .hit { background: var(--accent); }
+.cal .hit .d, .cal .hit .n { color: #fff; }
+.cal .today { outline: 2px solid var(--koa); outline-offset: 1px; }
+.cal .future { opacity: .45; }
+.navbtn { padding: 4px 12px; font-size: 18px; line-height: 1; }
+
 /* 이번 주 7칸 */
 .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
 .week div { display: grid; gap: 2px; justify-items: center; font-size: 12px; color: var(--muted); }
@@ -106,6 +135,29 @@ input { background: var(--bg); border: 1px solid var(--line); border-radius: 10p
     <button class="minus" id="minus">잘못 눌렀어요 −1</button>
   </section>
 
+  <section class="card metro" aria-labelledby="mTitle">
+    <div class="row spread">
+      <h2 id="mTitle">메트로놈</h2>
+      <div class="beats" id="beats" aria-hidden="true"></div>
+    </div>
+    <div class="row spread">
+      <div class="bpm"><span id="bpmTxt">80</span> <small>BPM</small></div>
+      <button class="metro-play" id="metroBtn">▶ 시작</button>
+    </div>
+    <div class="row">
+      <button id="bpmDown5" aria-label="BPM 5 내리기">−5</button>
+      <button id="bpmDown1" aria-label="BPM 1 내리기">−1</button>
+      <input type="range" id="bpm" min="40" max="208" value="80" aria-label="BPM" style="flex:1;min-width:120px">
+      <button id="bpmUp1" aria-label="BPM 1 올리기">+1</button>
+      <button id="bpmUp5" aria-label="BPM 5 올리기">+5</button>
+    </div>
+    <div class="row spread">
+      <span class="note">한 마디 박자</span>
+      <div class="seg" id="meter"></div>
+    </div>
+    <div class="note">아이폰 옆면의 무음 스위치가 켜져 있으면 소리가 안 날 수 있어요.</div>
+  </section>
+
   <section class="card" aria-labelledby="pTitle">
     <h2 id="pTitle">목표 진행</h2>
     <div class="bars" id="bars"></div>
@@ -116,6 +168,16 @@ input { background: var(--bg); border: 1px solid var(--line); border-radius: 10p
     <div class="row spread"><h2 id="wTitle">이번 주</h2><span class="note num" id="weekSum"></span></div>
     <div class="week" id="week"></div>
     <div class="note">15회를 채운 날은 진하게 표시돼요.</div>
+  </section>
+
+  <section class="card" aria-labelledby="calTitle">
+    <div class="row spread">
+      <button class="ghost navbtn" id="calPrev" aria-label="이전 달">‹</button>
+      <h2 id="calTitle">달력</h2>
+      <button class="ghost navbtn" id="calNext" aria-label="다음 달">›</button>
+    </div>
+    <div class="cal" id="cal"></div>
+    <div class="row spread note"><span id="calSum"></span><span>숫자 = 그날 한 횟수</span></div>
   </section>
 
   <section class="card" aria-labelledby="cTitle">
@@ -204,6 +266,7 @@ input { background: var(--bg); border: 1px solid var(--line); border-radius: 10p
     $("weekSum").textContent = `${fmt(s.w)} / ${GOAL.week}회`;
 
     drawAcc(s);
+    drawCal(s);
     $("start").value = state.start;
   }
 
@@ -359,6 +422,66 @@ input { background: var(--bg); border: 1px solid var(--line); border-radius: 10p
   }
   window.addEventListener("resize", () => render());
   matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => render());
+
+  // ---------- 달력: 날마다 한 횟수 ----------
+  let calMonth = new Date(); calMonth.setDate(1);
+  function drawCal(s) {
+    const y = calMonth.getFullYear(), mo = calMonth.getMonth();
+    $("calTitle").textContent = `${y}년 ${mo + 1}월`;
+    const first = new Date(y, mo, 1).getDay(), n = new Date(y, mo + 1, 0).getDate();
+    let h = "일월화수목금토".split("").map(c => `<div class="dow">${c}</div>`).join("");
+    for (let i = 0; i < first; i++) h += `<div class="blank"></div>`;
+    let sum = 0, hit = 0;
+    for (let d = 1; d <= n; d++) {
+      const k = `${y}-${pad(mo + 1)}-${pad(d)}`, v = state.days[k] || 0;
+      sum += v; if (v >= GOAL.day) hit++;
+      const cls = [v >= GOAL.day ? "hit" : v > 0 ? "some" : "", k === s.today ? "today" : "", k > s.today ? "future" : ""].join(" ");
+      h += `<div class="${cls}" title="${k} · ${v}회"><span class="d">${d}</span><span class="n">${v || ""}</span></div>`;
+    }
+    $("cal").innerHTML = h;
+    $("calSum").textContent = `이달 ${fmt(sum)}회 · 목표 달성 ${hit}일`;
+  }
+  $("calPrev").onclick = () => { calMonth.setMonth(calMonth.getMonth() - 1); render(); };
+  $("calNext").onclick = () => { calMonth.setMonth(calMonth.getMonth() + 1); render(); };
+
+  // ---------- 메트로놈 (Web Audio로 정확한 박자) ----------
+  let ac = null, metroOn = false, nextT = 0, beat = 0, metroTimer = null;
+  let meter = ls.get("metro.meter", 4);
+  const bpmVal = () => +$("bpm").value;
+  function setBpm(v) { $("bpm").value = Math.max(40, Math.min(208, v)); $("bpmTxt").textContent = bpmVal(); ls.set("metro.bpm", bpmVal()); }
+  function drawMeter() {
+    $("meter").innerHTML = [2, 3, 4, 6].map(m => `<button aria-pressed="${m === meter}" data-m="${m}">${m}박</button>`).join("");
+    $("beats").innerHTML = Array.from({ length: meter }, (_, i) => `<span class="${i === 0 ? "first" : ""}"></span>`).join("");
+  }
+  $("meter").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; meter = +b.dataset.m; ls.set("metro.meter", meter); beat = 0; drawMeter(); });
+  setBpm(ls.get("metro.bpm", 80)); drawMeter();
+  $("bpm").oninput = () => setBpm(bpmVal());
+  [["bpmDown5", -5], ["bpmDown1", -1], ["bpmUp1", 1], ["bpmUp5", 5]].forEach(([id, d]) => $(id).onclick = () => setBpm(bpmVal() + d));
+  function click(t, accent) {
+    const o = ac.createOscillator(), gn = ac.createGain();
+    o.frequency.value = accent ? 1760 : 1175;
+    gn.gain.setValueAtTime(0.0001, t);
+    gn.gain.exponentialRampToValueAtTime(accent ? 0.7 : 0.4, t + 0.002);
+    gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+    o.connect(gn).connect(ac.destination); o.start(t); o.stop(t + 0.07);
+  }
+  function schedule() {
+    while (nextT < ac.currentTime + 0.12) {
+      const b = beat % meter, t = nextT;
+      click(t, b === 0);
+      setTimeout(() => { if (!metroOn) return; [...$("beats").children].forEach((el, i) => el.classList.toggle("on", i === b)); }, Math.max(0, (t - ac.currentTime) * 1000));
+      nextT += 60 / bpmVal(); beat++;
+    }
+  }
+  $("metroBtn").onclick = async () => {
+    if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+    await ac.resume();
+    metroOn = !metroOn;
+    $("metroBtn").classList.toggle("on", metroOn);
+    $("metroBtn").textContent = metroOn ? "■ 정지" : "▶ 시작";
+    if (metroOn) { beat = 0; nextT = ac.currentTime + 0.06; metroTimer = setInterval(schedule, 25); }
+    else { clearInterval(metroTimer); [...$("beats").children].forEach(el => el.classList.remove("on")); }
+  };
 
   // ---------- 조작 ----------
   function change(n) {
