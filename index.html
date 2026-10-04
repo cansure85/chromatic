@@ -45,7 +45,7 @@
   --accent: #f0688f; --accent-soft: #3d2029; --koa: #d0a271; --track: #213031; --mid: #a8466a; --ok: #6cc59a;
   color-scheme: dark; }
 
-body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--f-body); }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--f-body); word-break: keep-all; overflow-wrap: anywhere; }
 .wrap { max-width: 480px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 48px; display: grid; gap: 16px; }
 h1, h2 { font-family: var(--f-display); margin: 0; text-wrap: balance; }
 h1 { font-size: 24px; }
@@ -76,6 +76,32 @@ input { background: var(--bg); border: 1px solid var(--line); border-radius: 10p
 .track i.full { background: var(--accent); }
 .pace { font-size: 14px; }
 .pace.ahead { color: var(--ok); } .pace.behind { color: var(--accent); }
+
+/* 환영 화면 */
+.splash { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px 16px calc(24px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(170deg, #1b2550 0%, #2c3a72 55%, #6a4b7e 100%); color: #fff6e6; transition: opacity .35s; }
+.splash.out { opacity: 0; pointer-events: none; }
+.splash-in { max-width: 420px; width: 100%; display: grid; gap: 22px; text-align: center; }
+.splash .hello { font-family: var(--f-display); font-size: 26px; line-height: 1.35; text-wrap: balance; }
+.splash .stat { font-size: 15px; opacity: .85; }
+.splash blockquote { margin: 0; padding: 20px 18px; border-radius: 16px; background: rgba(255,255,255,.1); font-family: var(--f-display); font-size: 19px; line-height: 1.6; text-wrap: balance; }
+.splash cite { display: block; margin-top: 10px; font: 13px var(--f-body); font-style: normal; opacity: .7; }
+.splash button { justify-self: center; padding: 14px 34px; border-radius: 999px; border: none; background: #ffcf73; color: #1b2550; font-weight: 700; font-size: 17px; }
+.splash .stars i { position: absolute; width: 3px; height: 3px; border-radius: 50%; background: #fff6d8; opacity: .7; }
+@media (prefers-reduced-motion: reduce) { .splash { transition: none; } }
+
+/* 연습 시간대 */
+.times { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.times div { display: grid; gap: 4px; justify-items: center; font-size: 12px; color: var(--muted); }
+.times .bar { width: 100%; height: 70px; border-radius: 10px; background: var(--track); display: flex; align-items: flex-end; overflow: hidden; }
+.times .bar i { display: block; width: 100%; background: var(--mid); border-radius: 10px 10px 0 0; }
+.times .bar i.top { background: var(--accent); }
+.times b { font: 500 14px var(--f-mono); color: var(--ink); }
+.hours { width: 100%; height: auto; display: block; }
+.hours text { fill: var(--muted); font: 9px var(--f-body); }
+.todaytimes { font-size: 13px; color: var(--muted); min-height: 1.2em; }
+.pchips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pchips button { padding: 6px 12px; font-size: 13px; border-radius: 999px; }
+.pchips button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
 
 /* 메트로놈 */
 .metro { display: grid; gap: 12px; }
@@ -143,6 +169,14 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
+<div class="splash" id="splash" role="dialog" aria-modal="true" aria-labelledby="hello">
+  <div class="splash-in">
+    <div class="hello" id="hello">반가워요</div>
+    <div class="stat" id="helloStat"></div>
+    <blockquote><span id="quote"></span><cite id="quoteBy"></cite></blockquote>
+    <button id="splashGo">연습 시작</button>
+  </div>
+</div>
 <div class="wrap">
   <header>
     <div class="label">우쿨렐레 · 1년 목표</div>
@@ -155,6 +189,7 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     <div class="label">오늘</div>
     <div class="big" id="today">0</div>
     <div class="note" id="todayNote">하루 목표 15회</div>
+    <div class="todaytimes" id="todayTimes"></div>
     <button class="plus" id="plus">+1 크로매틱</button>
     <button class="minus" id="minus">잘못 눌렀어요 −1</button>
     <label class="field" style="width:100%;text-align:left;display:grid;gap:4px">
@@ -223,6 +258,7 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
         <button id="cePlus" aria-label="1 더하기">+1</button>
         <span class="note">회</span>
       </div>
+      <div class="field"><span class="note">언제 연습했나요? (선택)</span><div class="pchips" id="cePeriod"></div></div>
       <textarea id="ceMemo" maxlength="500" placeholder="그날 연습 메모 (선택)"></textarea>
       <div class="row">
         <button class="save" id="ceSave">저장</button>
@@ -234,6 +270,14 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
   <section class="card" aria-labelledby="memoTitle">
     <h2 id="memoTitle">연습 메모</h2>
     <div class="memos" id="memos"></div>
+  </section>
+
+  <section class="card" aria-labelledby="tTitle">
+    <div class="row spread"><h2 id="tTitle">언제 연습했나요</h2>
+      <div class="seg" id="tRange"></div></div>
+    <div class="times" id="times"></div>
+    <svg class="hours" id="hours" viewBox="0 0 340 70" role="img" aria-label="시간별 연습 횟수"></svg>
+    <div class="note" id="timesNote"></div>
   </section>
 
   <section class="card" aria-labelledby="cTitle">
@@ -294,7 +338,7 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
   };
 
   // 상태: { start: "YYYY-MM-DD", days: { "YYYY-MM-DD": 횟수 } }
-  let state = { start: ymd(new Date()), days: {}, notes: {} };
+  let state = { start: ymd(new Date()), days: {}, notes: {}, times: {} };  // times: { 날짜: { 시(0~23): 횟수 } }
   let save = async () => ls.set("chromatic", state);
 
   function toast(msg) {
@@ -348,6 +392,7 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
 
     drawAcc(s);
     drawCal(s);
+    drawTimes(s); drawTodayTimes(s);
     drawMemos();
     $("start").value = state.start;
   }
@@ -532,6 +577,7 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     $("ceDate").value = k; $("ceDate").max = ymd(new Date());
     $("ceVal").value = state.days[k] || 0;
     $("ceMemo").value = state.notes[k] || "";
+    cePeriod = mainPeriod(state.times[k]); drawPeriodChips();
     if (k.slice(0, 7) !== ymd(calMonth).slice(0, 7)) { calMonth = parse(k); calMonth.setDate(1); }
     $("calEdit").hidden = false; render(); $("ceVal").focus(); $("ceVal").select();
   }
@@ -549,6 +595,11 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     if (v) state.days[editKey] = v; else delete state.days[editKey];
     const memo = $("ceMemo").value.trim();
     if (memo) state.notes[editKey] = memo; else delete state.notes[editKey];
+    // 시간대: 고른 시간대가 있으면 그 시간대로 기록, 없으면 기존 기록을 횟수에 맞춰 유지
+    const old = state.times[editKey] || {}, oldSum = Object.values(old).reduce((a, b) => a + b, 0);
+    if (!v) delete state.times[editKey];
+    else if (cePeriod !== null && (mainPeriod(old) !== cePeriod || oldSum !== v)) state.times[editKey] = { [PERIODS[cePeriod].rep]: v };
+    else if (oldSum !== v && oldSum > 0) { const h = Object.keys(old).sort((a, b) => old[b] - old[a])[0]; state.times[editKey] = { ...old, [h]: old[h] + (v - oldSum) }; if (state.times[editKey][h] <= 0) state.times[editKey] = { [h]: v }; }
     let moved = false;
     if (v && editKey < state.start) { state.start = editKey; moved = true; }   // 시작일보다 앞선 기록이면 1년 시작일을 그날로
     const d = parse(editKey);
@@ -581,7 +632,7 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
 
   // ---------- 기록 옮기기 (백업 코드) ----------
   $("bkCopy").onclick = async () => {
-    const json = JSON.stringify({ start: state.start, days: state.days, notes: state.notes });
+    const json = JSON.stringify({ start: state.start, days: state.days, notes: state.notes, times: state.times });
     const code = "CHROMATIC5000-" + btoa(unescape(encodeURIComponent(json)));   // 따옴표 없는 코드라 폰에서 글자가 바뀌지 않음
     try { await navigator.clipboard.writeText(code); toast("기록을 복사했어요. 새 앱에서 '기록 붙여넣기'를 누르세요"); }
     catch { $("bkBox").hidden = false; $("bkText").value = code; $("bkText").select(); $("bkMsg").textContent = "자동 복사가 안 돼서 아래 글자를 직접 복사해 주세요."; }
@@ -616,7 +667,11 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     const days = {}; for (const [k, v] of Object.entries(d.days)) if (/^\d{4}-\d{2}-\d{2}$/.test(k) && v > 0) days[k] = Math.min(999, Math.round(v));
     const notes = {}; for (const [k, v] of Object.entries(d.notes || {})) if (/^\d{4}-\d{2}-\d{2}$/.test(k) && v) notes[k] = String(v).slice(0, 500);
     const n = Object.values(days).reduce((a, b) => a + b, 0);
-    pending = { start: /^\d{4}-\d{2}-\d{2}$/.test(d.start || "") ? d.start : state.start, days, notes };
+    const times = {};
+    for (const [k, h] of Object.entries(d.times || {})) if (/^\d{4}-\d{2}-\d{2}$/.test(k) && h && typeof h === "object") {
+      const o = {}; for (const [hr, c] of Object.entries(h)) if (+hr >= 0 && +hr < 24 && c > 0) o[+hr] = Math.round(c); if (Object.keys(o).length) times[k] = o;
+    }
+    pending = { start: /^\d{4}-\d{2}-\d{2}$/.test(d.start || "") ? d.start : state.start, days, notes, times };
     $("bkMsg").textContent = "";
     $("bkSummary").textContent = `${fmt(n)}회 · ${Object.keys(days).length}일 · 메모 ${Object.keys(notes).length}개 기록을 찾았어요`;
     $("bkConfirm").hidden = false;
@@ -715,6 +770,130 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     else { clearInterval(metroTimer); [...$("beats").children].forEach(el => el.classList.remove("on")); }
   };
 
+  // ---------- 연습 시간대 ----------
+  const PERIODS = [
+    { name: "새벽", from: 0, to: 6, rep: 5 },
+    { name: "아침", from: 6, to: 12, rep: 9 },
+    { name: "오후", from: 12, to: 18, rep: 15 },
+    { name: "저녁", from: 18, to: 24, rep: 21 }
+  ];
+  const periodOf = h => PERIODS.findIndex(p => h >= p.from && h < p.to);
+  function mainPeriod(t) {
+    if (!t) return null; const c = [0, 0, 0, 0];
+    for (const [h, n] of Object.entries(t)) c[periodOf(+h)] += n;
+    const m = Math.max(...c); return m > 0 ? c.indexOf(m) : null;
+  }
+  let cePeriod = null;
+  function drawPeriodChips() {
+    $("cePeriod").innerHTML = PERIODS.map((p, i) => `<button type="button" aria-pressed="${i === cePeriod}" data-p="${i}">${p.name}</button>`).join("");
+  }
+  $("cePeriod").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; const i = +b.dataset.p; cePeriod = cePeriod === i ? null : i; drawPeriodChips(); });
+  const hourLabel = h => h === 0 ? "밤 12시" : h < 6 ? `새벽 ${h}시` : h < 12 ? `오전 ${h}시` : h === 12 ? "낮 12시" : h < 18 ? `오후 ${h - 12}시` : `저녁 ${h - 12}시`;
+  let tRange = ls.get("times.range", "month");
+  const RANGES = { week: "이번 주", month: "이번 달", all: "전체" };
+  $("tRange").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; tRange = b.dataset.r; ls.set("times.range", tRange); render(); });
+  function drawTimes(s) {
+    $("tRange").innerHTML = Object.entries(RANGES).map(([k, v]) => `<button aria-pressed="${k === tRange}" data-r="${k}">${v}</button>`).join("");
+    const from = tRange === "week" ? s.mon : tRange === "month" ? s.today.slice(0, 8) + "01" : "0000";
+    const hrs = new Array(24).fill(0);
+    for (const [k, t] of Object.entries(state.times)) if (k >= from && k <= s.today) for (const [h, n] of Object.entries(t)) hrs[+h] += n;
+    const per = PERIODS.map(p => hrs.slice(p.from, p.to).reduce((a, b) => a + b, 0));
+    const tot = per.reduce((a, b) => a + b, 0), top = Math.max(...per);
+    $("times").innerHTML = PERIODS.map((p, i) => `<div><div class="bar"><i class="${per[i] && per[i] === top ? "top" : ""}" style="height:${top ? per[i] / top * 100 : 0}%"></i></div><b>${per[i]}</b>${p.name}</div>`).join("");
+    // 24시간 막대
+    const W = 340, H = 70, L = 4, R = 4, B = 14, bw = (W - L - R) / 24, mh = Math.max(1, ...hrs);
+    let g = "";
+    hrs.forEach((n, h) => {
+      const bh = n / mh * (H - B - 4);
+      g += `<rect x="${L + h * bw + 1}" y="${H - B - bh}" width="${bw - 2}" height="${Math.max(n ? 2 : 1, bh)}" rx="2" fill="${n ? "var(--mid)" : "var(--track)"}"/>`;
+      if (h % 6 === 0) g += `<text x="${L + h * bw + 1}" y="${H - 2}">${h}시</text>`;
+    });
+    $("hours").innerHTML = g;
+    if (!tot) { $("timesNote").textContent = "+1을 누르면 몇 시에 연습했는지 자동으로 기록돼요."; return; }
+    const bestH = hrs.indexOf(Math.max(...hrs));
+    $("timesNote").textContent = `${RANGES[tRange]} 가장 많이 연습한 때는 ${PERIODS[per.indexOf(top)].name}, 특히 ${hourLabel(bestH)} 무렵이에요.`;
+  }
+  function drawTodayTimes(s) {
+    const t = state.times[s.today];
+    if (!t) { $("todayTimes").textContent = ""; return; }
+    const hs = Object.keys(t).map(Number).sort((a, b) => a - b);
+    $("todayTimes").textContent = "오늘 연습: " + hs.map(h => `${hourLabel(h)} ${t[h]}회`).join(" · ");
+  }
+
+  // ---------- 환영 화면: 들어올 때마다 다른 한마디 ----------
+  // 직접 쓴 응원 문구와 널리 전해지는 옛말
+  const QUOTES = [
+    ["오늘의 15번이 내년의 5,000번을 만들어요.", ""],
+    ["느리게 정확하게. 빠르기는 정확함 뒤에 저절로 따라와요.", ""],
+    ["손가락은 기억해요. 어제 연습한 만큼 오늘이 쉬워져요.", ""],
+    ["완벽한 하루보다 빠지지 않는 하루가 더 멀리 가요.", ""],
+    ["틀린 음은 실패가 아니라 다음 음을 위한 지도예요.", ""],
+    ["메트로놈을 5만 올려도 한 달이면 20이 올라가요.", ""],
+    ["오늘 컨디션이 별로라면 딱 5번만. 시작하면 이어져요.", ""],
+    ["작은 소리로 또박또박. 깨끗한 소리가 먼저예요.", ""],
+    ["어제의 나보다 한 번 더. 그거면 충분해요.", ""],
+    ["연습은 저금이에요. 매일 넣으면 어느 날 큰돈이 돼요.", ""],
+    ["힘을 빼면 소리가 열려요. 어깨부터 내려놓고 시작해요.", ""],
+    ["지루한 반복이 즐거운 연주가 되는 날이 와요.", ""],
+    ["오늘 친 크로매틱 하나하나가 그림 조각이 되고 있어요.", ""],
+    ["잘하는 날도 안 되는 날도 기록하면 다 실력이 돼요.", ""],
+    ["네 손가락이 모두 친구가 될 때까지, 천천히.", ""],
+    ["숨을 고르고, 첫 음을 정성껏.", ""],
+    ["음악은 서두르지 않는 사람에게 문을 열어 줘요.", ""],
+    ["오늘 15번, 이번 주 100번. 지금 한 번부터.", ""],
+    ["천 리 길도 한 걸음부터.", "우리 속담"],
+    ["낙숫물이 댓돌을 뚫는다.", "우리 속담"],
+    ["티끌 모아 태산.", "우리 속담"],
+    ["시작이 반이다.", "우리 속담"],
+    ["구슬이 서 말이라도 꿰어야 보배.", "우리 속담"],
+    ["배움은 물을 거슬러 배를 젓는 것과 같아, 나아가지 않으면 물러난다.", "옛말"],
+    ["우공이 산을 옮긴다.", "고사성어 · 우공이산"],
+    ["물방울이 바위를 뚫는 것은 힘이 아니라 꾸준함 때문이다.", "옛 서양 격언"],
+    ["로마는 하루아침에 이루어지지 않았다.", "서양 속담"],
+    ["연습이 완벽을 만든다.", "서양 속담"],
+    ["천천히 그러나 꾸준히 가는 자가 이긴다.", "옛 우화의 교훈"],
+    ["알로하! 오늘도 즐겁게, 한 음 한 음.", ""]
+  ];
+  function greeting(h) {
+    if (h < 5) return "늦은 밤에도 우쿨렐레와 함께네요";
+    if (h < 9) return "좋은 아침이에요, 이른 연습 멋져요";
+    if (h < 12) return "좋은 오전이에요";
+    if (h < 14) return "점심 즈음의 연습, 좋아요";
+    if (h < 18) return "좋은 오후예요";
+    if (h < 22) return "편안한 저녁이에요";
+    return "하루의 끝, 우쿨렐레로 마무리해요";
+  }
+  function showSplash() {
+    const s = sums(), h = new Date().getHours();
+    $("hello").textContent = greeting(h) + " 🌺";
+    // 연속 연습일
+    let streak = 0; const d = new Date(); if (!state.days[ymd(d)]) d.setDate(d.getDate() - 1);
+    while (state.days[ymd(d)]) { streak++; d.setDate(d.getDate() - 1); }
+    const parts = [];
+    if (s.d >= GOAL.day) parts.push(`오늘 목표 ${GOAL.day}회를 벌써 채웠어요`);
+    else if (s.d > 0) parts.push(`오늘 ${s.d}회, ${GOAL.day - s.d}회 남았어요`);
+    else parts.push(`오늘의 목표는 ${GOAL.day}회예요`);
+    if (streak >= 2) parts.push(`${streak}일 연속 연습 중`);
+    parts.push(`5,000회까지 ${fmt(Math.max(0, GOAL.year - s.y))}회`);
+    $("helloStat").textContent = parts.join(" · ");
+    let i, last = ls.get("quote.last", -1);
+    do { i = Math.floor(Math.random() * QUOTES.length); } while (i === last && QUOTES.length > 1);
+    ls.set("quote.last", i);
+    $("quote").textContent = QUOTES[i][0];
+    $("quoteBy").textContent = QUOTES[i][1] ? "— " + QUOTES[i][1] : "";
+    $("splash").classList.remove("out"); $("splash").hidden = false;
+    $("splashGo").focus();
+  }
+  function hideSplash() { $("splash").classList.add("out"); setTimeout(() => $("splash").hidden = true, 350); ls.set("splash.at", Date.now()); }
+  $("splashGo").onclick = hideSplash;
+  $("splash").addEventListener("click", e => { if (e.target === $("splash")) hideSplash(); });
+  // 다시 돌아올 때도: 30분 넘게 다른 곳에 있다 오면 새 한마디
+  let hiddenAt = 0;
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") hiddenAt = Date.now();
+    else if (hiddenAt && Date.now() - hiddenAt > 30 * 60 * 1000) showSplash();
+  });
+
   // ---------- 조작 ----------
   function change(n) {
     const k = ymd(new Date());
@@ -722,6 +901,13 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     const v = Math.max(0, before + n);
     if (v === before) return;
     if (v) state.days[k] = v; else delete state.days[k];
+    const t = state.times[k] || (state.times[k] = {});
+    if (n > 0) { const h = new Date().getHours(); t[h] = (t[h] || 0) + 1; }
+    else {                                                  // −1은 가장 최근 시간대에서 뺌
+      const hs = Object.keys(t).map(Number).sort((a, b) => b - a);
+      if (hs.length) { t[hs[0]]--; if (t[hs[0]] <= 0) delete t[hs[0]]; }
+    }
+    if (!Object.keys(t).length) delete state.times[k];
     render(); queueSave();
     if (n > 0 && v === GOAL.day) toast(`오늘 ${GOAL.day}회 달성!`);
     const s = sums();
@@ -760,7 +946,9 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
   }
   state = ls.get("chromatic", state);
   if (!state.notes) state.notes = {};
+  if (!state.times) state.times = {};
   render();
+  showSplash();
   (async () => {
     const [db, user] = window.claude?.use ? await Promise.all([claude.use("db"), claude.use("user")]) : [null, null];
     const uid = user ? await user.id() : null;
@@ -768,7 +956,7 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     if (!db || !uid || canWrite === false) { goLocal(); return; }
     const ref = db.doc(`data/users/${uid}/chromatic`);
     save = async () => {
-      try { await ref.set({ start: state.start, days: state.days, notes: state.notes }); }
+      try { await ref.set({ start: state.start, days: state.days, notes: state.notes, times: state.times }); }
       catch (e) {
         if (e?.code === "invalid_argument" || e?.code === "not_granted" || e?.code === "revoked") { goLocal(); return; }
         throw e;
@@ -776,7 +964,7 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     };
     unsub = ref.onSnapshot(snap => {
       if (snap.metadata.hasPendingWrites || timer || saving) return; // 저장 대기 중인 탭이 있으면 화면 값을 유지
-      if (snap.exists) { const d = snap.data(); state = { start: d.start || state.start, days: { ...(d.days || {}) }, notes: { ...(d.notes || {}) } }; render(); }
+      if (snap.exists) { const d = snap.data(); state = { start: d.start || state.start, days: { ...(d.days || {}) }, notes: { ...(d.notes || {}) }, times: JSON.parse(JSON.stringify(d.times || {})) }; render(); }
       else if (Object.keys(state.days).length) flush(); // 이 기기에 있던 기록을 계정으로 옮김
     }, () => goLocal());
   })();
