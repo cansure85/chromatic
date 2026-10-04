@@ -581,22 +581,36 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
 
   // ---------- 기록 옮기기 (백업 코드) ----------
   $("bkCopy").onclick = async () => {
-    const code = "CHROMATIC5000:" + JSON.stringify({ start: state.start, days: state.days, notes: state.notes });
+    const json = JSON.stringify({ start: state.start, days: state.days, notes: state.notes });
+    const code = "CHROMATIC5000-" + btoa(unescape(encodeURIComponent(json)));   // 따옴표 없는 코드라 폰에서 글자가 바뀌지 않음
     try { await navigator.clipboard.writeText(code); toast("기록을 복사했어요. 새 앱에서 '기록 붙여넣기'를 누르세요"); }
     catch { $("bkBox").hidden = false; $("bkText").value = code; $("bkText").select(); $("bkMsg").textContent = "자동 복사가 안 돼서 아래 글자를 직접 복사해 주세요."; }
   };
   $("bkOpen").onclick = () => { $("bkBox").hidden = false; $("bkText").value = ""; $("bkMsg").textContent = ""; $("bkText").focus(); };
   $("bkClose").onclick = () => { $("bkBox").hidden = true; $("bkConfirm").hidden = true; };
   let pending = null;
+  // 붙여넣은 글자에서 기록 읽기: 새 코드(따옴표 없음)와 예전 코드(따옴표 있음) 모두 지원
+  function decodeBackup(raw) {
+    let t = raw.replace(/[​-‍﻿]/g, "").replace(/ /g, " ");
+    const b = t.match(/CHROMATIC5000-([A-Za-z0-9+/=\s]+)/);
+    if (b) {
+      try { const d = JSON.parse(decodeURIComponent(escape(atob(b[1].replace(/\s+/g, ""))))); if (d && typeof d.days === "object") return d; } catch {}
+    }
+    // 아이폰 '스마트 구두점'이 바꾼 둥근 따옴표를 곧은 따옴표로 되돌림
+    t = t.replace(/[“”„‟″«»]/g, '"').replace(/[‘’‚‛′]/g, "'");
+    const m = t.match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    try { const d = JSON.parse(m[0]); return d && typeof d.days === "object" ? d : null; } catch { return null; }
+  }
   $("bkLoad").onclick = () => {
     $("bkText").blur();                                  // 키보드를 내려서 안내가 보이게
     $("bkConfirm").hidden = true; pending = null;
     const raw = $("bkText").value.trim();
-    const m = raw.match(/\{[\s\S]*\}/);                  // 앞뒤에 다른 글자가 붙어 있어도 기록 부분만
-    let d;
-    try { d = JSON.parse(m ? m[0] : ""); if (!d || typeof d.days !== "object") throw 0; }
-    catch {
-      $("bkMsg").textContent = raw ? "기록 코드가 아니에요. '기록 복사하기'로 복사한 글자 전체를 붙여넣어 주세요." : "먼저 복사한 기록을 위 칸에 붙여넣어 주세요.";
+    const d = decodeBackup(raw);
+    if (!d) {
+      $("bkMsg").textContent = raw
+        ? `기록 코드를 읽지 못했어요. 붙여넣은 글자: "${raw.slice(0, 24)}${raw.length > 24 ? "…" : ""}" (총 ${raw.length}자). '기록 복사하기'를 다시 눌러 복사한 뒤 바로 붙여넣어 주세요.`
+        : "먼저 복사한 기록을 위 칸에 붙여넣어 주세요.";
       $("bkMsg").scrollIntoView({ block: "center", behavior: "smooth" }); return;
     }
     const days = {}; for (const [k, v] of Object.entries(d.days)) if (/^\d{4}-\d{2}-\d{2}$/.test(k) && v > 0) days[k] = Math.min(999, Math.round(v));
