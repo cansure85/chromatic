@@ -207,111 +207,119 @@ input { background: var(--bg); border: 1px solid var(--line); border-radius: 10p
     $("start").value = state.start;
   }
 
-  // ---------- 그림: 100×100 조각이 정해진 순서로 칠해짐. 다 채우면 훌라 추는 아이와 우쿨렐레 치는 거북이 ----------
+  // ---------- 그림: 100×100 조각이 정해진 순서로 칠해짐. 무슨 그림인지는 다 채울 때까지 비밀 ----------
   const N = 100, CELLS = N * N;
   const PIX = (() => {
     const S = 400, c = document.createElement("canvas"); c.width = c.height = S;
     const g = c.getContext("2d");
-    let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    let seed = 52; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     const circle = (x, y, r, col) => { g.fillStyle = col; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); };
     const oval = (x, y, rx, ry, col, rot = 0) => { g.fillStyle = col; g.beginPath(); g.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2); g.fill(); };
     const stroke = (col, w) => { g.strokeStyle = col; g.lineWidth = w; g.lineCap = "round"; g.lineJoin = "round"; };
-    const flower = (x, y, r, petal, mid) => {
-      for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2 - Math.PI / 2; circle(x + Math.cos(a) * r * 0.62, y + Math.sin(a) * r * 0.62, r * 0.55, petal); }
-      circle(x, y, r * 0.28, mid);
-    };
+    const glow = (x, y, r, col) => { const q = g.createRadialGradient(x, y, 0, x, y, r); q.addColorStop(0, col); q.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = q; g.fillRect(x - r, y - r, r * 2, r * 2); };
+    const H = 250;  // 수평선
 
-    // 배경: 파스텔 하늘, 해, 구름
-    const sky = g.createLinearGradient(0, 0, 0, 250);
-    sky.addColorStop(0, "#bfe9f7"); sky.addColorStop(1, "#fff1df");
-    g.fillStyle = sky; g.fillRect(0, 0, S, S);
-    circle(340, 72, 50, "rgba(255,222,140,.35)"); circle(340, 72, 34, "#ffd98a");
-    [[62, 78], [92, 68], [118, 80], [228, 52], [252, 44], [274, 54]].forEach(([x, y]) => circle(x, y, 18, "#ffffff"));
-    oval(90, 86, 44, 12, "#ffffff"); oval(252, 60, 40, 11, "#ffffff");
-    // 바다와 모래
-    g.fillStyle = "#8fd8de"; g.fillRect(0, 232, S, 50);
-    stroke("#c4eef0", 5); [[40, 248, 60], [170, 258, 50], [300, 246, 70]].forEach(([x, y, w]) => { g.beginPath(); g.moveTo(x, y); g.lineTo(x + w, y); g.stroke(); });
-    g.fillStyle = "#fbe3b6"; g.beginPath(); g.moveTo(0, 280);
-    for (let x = 0; x <= S; x += 20) g.quadraticCurveTo(x + 10, 272 + (x / 20 % 2) * 10, x + 20, 280);
-    g.lineTo(S, S); g.lineTo(0, S); g.fill();
-    [[60, 330], [210, 360], [350, 300], [120, 375]].forEach(([x, y]) => circle(x, y, 3, "#efc98c"));
-
-    // 음표
-    const note = (x, y, col) => {
-      oval(x, y, 8, 6, col, -0.4); stroke(col, 4);
-      g.beginPath(); g.moveTo(x + 7, y - 2); g.lineTo(x + 7, y - 30); g.quadraticCurveTo(x + 14, y - 24, x + 19, y - 16); g.stroke();
-    };
-    note(205, 150, "#8a6bb0"); note(232, 112, "#e8738f"); note(196, 96, "#5aa6b8");
-
-    // ---- 훌라 추는 아이 ----
-    const skin = "#f4c7a3", hair = "#3d2b2b";
-    // 머리카락(뒤)
-    circle(135, 150, 52, hair); g.fillStyle = hair; g.fillRect(85, 150, 100, 62);
-    // 팔 (양옆으로 물결치듯)
-    stroke(skin, 15);
-    g.beginPath(); g.moveTo(114, 214); g.quadraticCurveTo(84, 232, 58, 204); g.stroke();
-    g.beginPath(); g.moveTo(156, 214); g.quadraticCurveTo(188, 196, 212, 216); g.stroke();
-    circle(55, 200, 9, skin); circle(215, 219, 9, skin);
-    // 다리
-    g.fillStyle = skin; g.fillRect(117, 300, 13, 30); g.fillRect(141, 300, 13, 30);
-    oval(121, 333, 11, 6, skin); oval(150, 333, 11, 6, skin);
-    // 윗옷
-    g.fillStyle = "#ff8fab"; g.beginPath(); g.roundRect(108, 196, 54, 58, 14); g.fill();
-    // 풀치마
-    g.fillStyle = "#79c46a"; g.beginPath(); g.moveTo(104, 246); g.lineTo(166, 246); g.lineTo(188, 308); g.lineTo(82, 308); g.closePath(); g.fill();
-    stroke("#559e4c", 4);
-    for (let k = 0; k <= 8; k++) { const t = k / 8; g.beginPath(); g.moveTo(108 + t * 54, 252); g.lineTo(88 + t * 94, 306); g.stroke(); }
-    g.fillStyle = "#f7c948"; g.fillRect(102, 242, 66, 9);                       // 허리띠
-    // 얼굴
-    circle(135, 160, 42, skin);
-    oval(135, 122, 42, 20, hair);                                               // 앞머리
-    stroke(hair, 5);
-    g.beginPath(); g.arc(118, 163, 7, Math.PI, 0); g.stroke();                   // 웃는 눈
-    g.beginPath(); g.arc(152, 163, 7, Math.PI, 0); g.stroke();
-    oval(108, 178, 9, 5, "rgba(255,130,150,.55)"); oval(162, 178, 9, 5, "rgba(255,130,150,.55)");
-    stroke("#b24d48", 4); g.beginPath(); g.arc(135, 176, 7, 0.15 * Math.PI, 0.85 * Math.PI); g.stroke();
-    flower(174, 124, 22, "#ff5e87", "#ffd166");                                 // 머리 꽃
-    // 레이(꽃목걸이)
-    for (let k = 0; k <= 10; k++) {
-      const a = Math.PI * (0.12 + 0.76 * k / 10);
-      circle(135 + Math.cos(a) * 30, 194 + Math.sin(a) * 18, 7, ["#ffd166", "#ff6f91", "#ffffff"][k % 3]);
+    // 밤하늘
+    const sky = g.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, "#0a1230"); sky.addColorStop(0.55, "#1c2c5e"); sky.addColorStop(1, "#3f5f92");
+    g.fillStyle = sky; g.fillRect(0, 0, S, H);
+    // 별
+    for (let i = 0; i < 170; i++) {
+      const x = rnd() * S, y = Math.pow(rnd(), 1.3) * (H - 30), r = rnd() < 0.08 ? 2 + rnd() : 0.6 + rnd() * 1.1;
+      circle(x, y, r, `rgba(255,250,235,${0.45 + rnd() * 0.55})`);
     }
-
-    // ---- 우쿨렐레 치는 거북이 ----
-    oval(262, 322, 19, 11, "#8fdcb7"); oval(318, 322, 19, 11, "#8fdcb7");      // 발
-    oval(290, 268, 60, 58, "#4fb58d");                                          // 등딱지 테두리
-    [[246, 236], [334, 236], [240, 290], [340, 290]].forEach(([x, y]) => circle(x, y, 12, "#6fcaa3"));
-    oval(290, 274, 44, 46, "#f6e7bf");                                          // 배
-    stroke("#e3cc96", 4);
-    g.beginPath(); g.moveTo(256, 262); g.lineTo(324, 262); g.moveTo(258, 290); g.lineTo(322, 290); g.moveTo(290, 232); g.lineTo(290, 318); g.stroke();
-    circle(290, 186, 38, "#8fdcb7");                                            // 머리
-    circle(276, 184, 6, "#2c2c34"); circle(304, 184, 6, "#2c2c34");
-    circle(278, 182, 2.2, "#ffffff"); circle(306, 182, 2.2, "#ffffff");
-    oval(266, 198, 8, 5, "rgba(255,130,150,.5)"); oval(314, 198, 8, 5, "rgba(255,130,150,.5)");
-    stroke("#2c2c34", 3.5); g.beginPath(); g.arc(290, 194, 8, 0.2 * Math.PI, 0.8 * Math.PI); g.stroke();
-    flower(316, 158, 13, "#ffb347", "#ff6f91");                                 // 귀 옆 꽃
-    // 우쿨렐레 (비스듬히 안고 있음)
-    g.save(); g.translate(292, 282); g.rotate(-0.75);
-    g.fillStyle = "#7a4a24"; g.fillRect(-5, -82, 10, 58);                       // 넥
-    g.fillStyle = "#4a2a14"; g.beginPath(); g.roundRect(-8, -100, 16, 20, 4); g.fill();
-    circle(0, -14, 19, "#d0904e"); circle(0, 12, 24, "#d0904e");               // 몸통
-    oval(-7, 8, 8, 13, "#e3ad6f", -0.2);                                        // 반짝임
-    circle(0, -6, 7, "#4a2a14");                                                 // 사운드홀
-    g.fillStyle = "#4a2a14"; g.fillRect(-9, 22, 18, 5);                          // 브릿지
-    oval(-1, -58, 12, 9, "#8fdcb7");                                             // 넥 잡은 앞발
-    oval(16, 8, 13, 9, "#8fdcb7");                                               // 줄 튕기는 앞발
+    [[60, 40], [165, 28], [355, 150], [120, 120]].forEach(([x, y]) => {
+      glow(x, y, 14, "rgba(255,248,220,.6)"); stroke("rgba(255,250,235,.9)", 1.6);
+      g.beginPath(); g.moveTo(x - 9, y); g.lineTo(x + 9, y); g.moveTo(x, y - 9); g.lineTo(x, y + 9); g.stroke();
+    });
+    // 달무지개 (밤에 뜨는 무지개)
+    ["#ff9a9a", "#ffc98a", "#fff1a0", "#a8f0b8", "#9cd4ff", "#c3a8ff"].forEach((col, k) => {
+      stroke(col, 7); g.globalAlpha = 0.22; g.beginPath(); g.arc(150, 330, 250 - k * 7, Math.PI * 1.08, Math.PI * 1.62); g.stroke();
+    });
+    g.globalAlpha = 1;
+    // 달
+    glow(300, 92, 110, "rgba(255,236,190,.35)");
+    circle(300, 92, 40, "#fff3d2");
+    [[288, 80, 7], [312, 100, 9], [296, 110, 4], [315, 76, 4]].forEach(([x, y, r]) => circle(x, y, r, "#f1e1b4"));
+    // 하늘로 오르는 등불
+    [[70, 175, 9], [96, 150, 6], [40, 130, 5], [210, 120, 7], [236, 160, 5], [350, 205, 8], [180, 70, 4], [375, 110, 5]].forEach(([x, y, r]) => {
+      glow(x, y, r * 4, "rgba(255,190,90,.45)");
+      g.fillStyle = "#ffcf73"; g.beginPath(); g.roundRect(x - r * 0.75, y - r, r * 1.5, r * 2, r * 0.4); g.fill();
+      g.fillStyle = "#fff0bf"; g.fillRect(x - r * 0.35, y - r * 0.4, r * 0.7, r * 0.9);
+    });
+    // 섬 실루엣
+    g.fillStyle = "#16244a"; g.beginPath(); g.moveTo(0, H);
+    [[0, 200], [30, 170], [55, 150], [75, 175], [95, 160], [130, 205], [165, 232], [190, H]].forEach(([x, y]) => g.lineTo(x, y)); g.fill();
+    g.fillStyle = "#1b2c55"; g.beginPath(); g.moveTo(330, H); g.quadraticCurveTo(360, 222, 400, 226); g.lineTo(400, H); g.fill();
+    // 작은 섬 위 야자수
+    stroke("#121d3c", 3.5);
+    [[362, 228, 352, 186], [384, 228, 392, 194]].forEach(([x0, y0, x1, y1]) => {
+      g.beginPath(); g.moveTo(x0, y0); g.quadraticCurveTo(x0 - 4, (y0 + y1) / 2, x1, y1); g.stroke();
+      g.fillStyle = "#121d3c";
+      for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; oval(x1 + Math.cos(a) * 9, y1 + Math.sin(a) * 4, 11, 3, "#121d3c", a); }
+    });
+    // 바다
+    const sea = g.createLinearGradient(0, H, 0, S);
+    sea.addColorStop(0, "#2a4a7a"); sea.addColorStop(1, "#0a1a36");
+    g.fillStyle = sea; g.fillRect(0, H, S, S - H);
+    // 달빛 반사
+    for (let i = 0; i < 60; i++) {
+      const y = H + 4 + Math.pow(rnd(), 1.2) * 140, w = 6 + rnd() * 22 - (y - H) * 0.05;
+      g.fillStyle = `rgba(255,238,195,${0.25 + rnd() * 0.5})`;
+      g.fillRect(300 - w / 2 + (rnd() - 0.5) * (14 + (y - H) * 0.3), y, Math.max(3, w), 1.6);
+    }
+    // 고래 꼬리 + 물보라
+    g.fillStyle = "#0e1d3e"; g.beginPath();
+    g.moveTo(92, 262); g.quadraticCurveTo(96, 236, 104, 222);
+    g.quadraticCurveTo(82, 214, 62, 196); g.quadraticCurveTo(90, 200, 108, 212);
+    g.quadraticCurveTo(126, 200, 154, 196); g.quadraticCurveTo(134, 214, 112, 222);
+    g.quadraticCurveTo(118, 236, 120, 262); g.closePath(); g.fill();
+    stroke("rgba(160,200,255,.35)", 2); g.beginPath(); g.moveTo(66, 198); g.quadraticCurveTo(90, 204, 106, 214); g.stroke();
+    for (let i = 0; i < 26; i++) { const a = Math.PI * (1.05 + rnd() * 0.9), d = 10 + rnd() * 34; circle(106 + Math.cos(a) * d * 1.3, 262 + Math.sin(a) * d * 0.7, 1 + rnd() * 2.2, "rgba(225,240,255,.85)"); }
+    oval(106, 266, 34, 5, "rgba(210,230,255,.5)");
+    // 반짝이는 바다(야광 플랑크톤)
+    for (let i = 0; i < 70; i++) { const x = 120 + rnd() * 200, y = 300 + rnd() * 70; circle(x, y, 0.8 + rnd() * 1.6, `rgba(120,240,230,${0.35 + rnd() * 0.5})`); }
+    // 카누와 우쿨렐레 치는 아이
+    const cx = 220, cy = 318;
+    oval(cx, cy + 12, 92, 8, "rgba(10,20,45,.6)");                                 // 그림자
+    stroke("#5a3a22", 3); g.beginPath(); g.moveTo(cx - 30, cy - 2); g.lineTo(cx - 30, cy + 20); g.moveTo(cx + 30, cy - 2); g.lineTo(cx + 30, cy + 20); g.stroke();
+    oval(cx + 4, cy + 22, 70, 4, "#6b4428");                                         // 아우트리거
+    g.fillStyle = "#8a5430"; g.beginPath(); g.moveTo(cx - 88, cy - 6); g.quadraticCurveTo(cx, cy + 22, cx + 88, cy - 6); g.quadraticCurveTo(cx, cy + 4, cx - 88, cy - 6); g.fill();
+    g.fillStyle = "#a96b3c"; g.beginPath(); g.moveTo(cx - 84, cy - 6); g.quadraticCurveTo(cx, cy + 10, cx + 84, cy - 6); g.quadraticCurveTo(cx, cy + 2, cx - 84, cy - 6); g.fill();
+    // 아이 (등불빛을 받아 따뜻한 색)
+    const kx = cx - 6, ky = cy - 30;
+    g.fillStyle = "#ffb347"; g.beginPath(); g.roundRect(kx - 15, ky + 4, 30, 26, 9); g.fill();     // 옷
+    for (let k = 0; k <= 6; k++) { const a = Math.PI * (0.15 + 0.7 * k / 6); circle(kx + Math.cos(a) * 14, ky + 4 + Math.sin(a) * 8, 3.6, ["#ff6f91", "#fff3c4", "#ffd166"][k % 3]); }  // 레이
+    circle(kx, ky - 14, 17, "#3a2622");                                                    // 머리카락
+    circle(kx, ky - 26, 9, "#3a2622");                                                     // 똥머리
+    circle(kx, ky - 11, 14, "#f2c29d");                                                    // 얼굴
+    oval(kx, ky - 22, 15, 7, "#3a2622");                                                   // 앞머리
+    stroke("#3a2622", 2.4); g.beginPath(); g.arc(kx - 6, ky - 10, 3, Math.PI, 0); g.stroke(); g.beginPath(); g.arc(kx + 6, ky - 10, 3, Math.PI, 0); g.stroke();
+    oval(kx - 9, ky - 5, 3.5, 2, "rgba(255,120,140,.6)"); oval(kx + 9, ky - 5, 3.5, 2, "rgba(255,120,140,.6)");
+    stroke("#a0443e", 1.8); g.beginPath(); g.arc(kx, ky - 5, 3, 0.15 * Math.PI, 0.85 * Math.PI); g.stroke();
+    for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2; circle(kx + 12 + Math.cos(a) * 3.5, ky - 24 + Math.sin(a) * 3.5, 3, "#ffffff"); } circle(kx + 12, ky - 24, 2, "#ffd166");  // 플루메리아
+    // 우쿨렐레
+    g.save(); g.translate(kx + 4, ky + 16); g.rotate(-0.55);
+    g.fillStyle = "#6a3d1d"; g.fillRect(-2.2, -34, 4.4, 26);
+    g.fillStyle = "#3d2210"; g.fillRect(-3.4, -42, 6.8, 9);
+    circle(0, -4, 8, "#e0a15c"); circle(0, 6, 10, "#e0a15c"); circle(0, -2, 3, "#3d2210");
     g.restore();
-
-    // 모래 위 꽃
-    flower(38, 352, 20, "#ff7a8a", "#ffd166"); flower(372, 356, 18, "#ffb347", "#ff6f91");
-    stroke("#5fae5a", 5); g.beginPath(); g.moveTo(58, 368); g.quadraticCurveTo(72, 350, 86, 360); g.stroke();
+    oval(kx - 13, ky + 20, 5, 4, "#f2c29d"); oval(kx + 15, ky + 4, 5, 4, "#f2c29d");   // 손
+    glow(kx, ky, 60, "rgba(255,190,110,.12)");
+    // 떠다니는 음표
+    const note = (x, y, col) => { oval(x, y, 5, 4, col, -0.4); stroke(col, 2.4); g.beginPath(); g.moveTo(x + 4.5, y - 1); g.lineTo(x + 4.5, y - 19); g.quadraticCurveTo(x + 9, y - 15, x + 12, y - 10); g.stroke(); };
+    note(250, 262, "#ffe7a8"); note(268, 238, "#ffc2d4"); note(240, 222, "#b8f0ff");
+    // 앞쪽 플루메리아와 잎
+    [[24, 384, -0.6], [376, 388, 0.5]].forEach(([x, y, r]) => { oval(x, y, 34, 12, "#173a33", r); oval(x + 10, y - 6, 26, 9, "#1f4a40", r + 0.5); });
+    const plumeria = (x, y, r) => { for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2 - 0.3; oval(x + Math.cos(a) * r * 0.6, y + Math.sin(a) * r * 0.6, r * 0.62, r * 0.36, "#fff8ec", a); } circle(x, y, r * 0.32, "#ffd36b"); };
+    plumeria(30, 372, 16); plumeria(58, 390, 11); plumeria(368, 374, 15);
     // 100×100으로 줄이며 색을 고르게 섞음
     const small = document.createElement("canvas"); small.width = small.height = N;
     const sg = small.getContext("2d"); sg.imageSmoothingEnabled = true; sg.imageSmoothingQuality = "high";
     sg.drawImage(c, 0, 0, N, N);
     const d = sg.getImageData(0, 0, N, N).data, out = new Uint8ClampedArray(CELLS * 3);
     for (let i = 0; i < CELLS; i++) {
-      const n = (rnd() - 0.5) * 4;   // 아주 옅은 종이 질감
+      const n = (rnd() - 0.5) * 5;   // 아주 옅은 종이 질감
       for (let k = 0; k < 3; k++) out[i * 3 + k] = d[i * 4 + k] + n;
     }
     return out;
