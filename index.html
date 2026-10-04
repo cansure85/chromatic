@@ -527,14 +527,15 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
   // 오늘 메모: 입력을 멈추면 자동 저장
   const esc = t => String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   let memoTimer = null;
-  $("todayMemo").addEventListener("input", () => {
-    clearTimeout(memoTimer);
-    memoTimer = setTimeout(() => {
-      const k = ymd(new Date()), m = $("todayMemo").value.trim();
-      if (m) state.notes[k] = m; else delete state.notes[k];
-      queueSave(); drawMemos(); drawCal(sums());
-    }, 800);
-  });
+  function commitMemo() {
+    clearTimeout(memoTimer); memoTimer = null;
+    const k = ymd(new Date()), m = $("todayMemo").value.trim();
+    if ((state.notes[k] || "") === m) return;
+    if (m) state.notes[k] = m; else delete state.notes[k];
+    queueSave(); drawMemos(); drawCal(sums());
+  }
+  $("todayMemo").addEventListener("input", () => { clearTimeout(memoTimer); memoTimer = setTimeout(commitMemo, 600); });
+  $("todayMemo").addEventListener("blur", commitMemo);
   function drawMemos() {
     const keys = Object.keys(state.notes).sort().reverse().slice(0, 30);
     $("memos").innerHTML = keys.length ? keys.map(k => {
@@ -646,7 +647,12 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
 
   // 연타해도 한 번에 묶어서 저장
   let timer = null, saving = false, again = false;
-  function queueSave() { clearTimeout(timer); timer = setTimeout(flush, 700); }
+  // 누를 때마다 이 기기에 즉시 저장하고, 계정 저장은 연타를 묶어서 보냄
+  function queueSave() { ls.set("chromatic", state); clearTimeout(timer); timer = setTimeout(flush, 700); }
+  // 앱을 닫거나 다른 앱으로 넘어갈 때 기다리던 저장을 바로 실행
+  function saveNow() { if (memoTimer) commitMemo(); if (timer) { clearTimeout(timer); flush(); } }
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveNow(); });
+  window.addEventListener("pagehide", saveNow);
   async function flush() {
     timer = null;
     if (saving) { again = true; return; }
