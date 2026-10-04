@@ -99,6 +99,11 @@ input[type=range] { width: 100%; accent-color: var(--accent); background: none; 
 .cal .today { outline: 2px solid var(--koa); outline-offset: 1px; }
 .cal .future { opacity: .45; }
 .navbtn { padding: 4px 12px; font-size: 18px; line-height: 1; }
+.cal .tap { cursor: pointer; }
+.cal .sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+.caledit { display: grid; gap: 10px; background: var(--bg); border-radius: 12px; padding: 12px; }
+.caledit input { width: 90px; font: 500 20px var(--f-mono); text-align: center; }
+.caledit .save { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 
 /* 이번 주 7칸 */
 .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
@@ -177,7 +182,20 @@ input[type=range] { width: 100%; accent-color: var(--accent); background: none; 
       <button class="ghost navbtn" id="calNext" aria-label="다음 달">›</button>
     </div>
     <div class="cal" id="cal"></div>
-    <div class="row spread note"><span id="calSum"></span><span>숫자 = 그날 한 횟수</span></div>
+    <div class="row spread note"><span id="calSum"></span><span>날짜를 누르면 횟수를 고칠 수 있어요</span></div>
+    <div class="caledit" id="calEdit" hidden>
+      <b id="ceTitle"></b>
+      <div class="row">
+        <button id="ceMinus" aria-label="1 빼기">−1</button>
+        <input type="number" id="ceVal" min="0" max="999" inputmode="numeric" aria-label="그날 횟수">
+        <button id="cePlus" aria-label="1 더하기">+1</button>
+        <span class="note">회</span>
+      </div>
+      <div class="row">
+        <button class="save" id="ceSave">저장</button>
+        <button id="ceCancel">닫기</button>
+      </div>
+    </div>
   </section>
 
   <section class="card" aria-labelledby="cTitle">
@@ -436,11 +454,38 @@ input[type=range] { width: 100%; accent-color: var(--accent); background: none; 
       const k = `${y}-${pad(mo + 1)}-${pad(d)}`, v = state.days[k] || 0;
       sum += v; if (v >= GOAL.day) hit++;
       const cls = [v >= GOAL.day ? "hit" : v > 0 ? "some" : "", k === s.today ? "today" : "", k > s.today ? "future" : ""].join(" ");
-      h += `<div class="${cls}" title="${k} · ${v}회"><span class="d">${d}</span><span class="n">${v || ""}</span></div>`;
+      const tap = k <= s.today ? ` tap" data-k="${k}" role="button" tabindex="0" aria-label="${mo + 1}월 ${d}일 ${v}회` : "";
+      h += `<div class="${cls}${k === editKey ? " sel" : ""}${tap}" title="${k} · ${v}회"><span class="d">${d}</span><span class="n">${v || ""}</span></div>`;
     }
     $("cal").innerHTML = h;
     $("calSum").textContent = `이달 ${fmt(sum)}회 · 목표 달성 ${hit}일`;
   }
+  // 지난 날짜 횟수 입력/수정
+  let editKey = null;
+  function openEdit(k) {
+    editKey = k; const d = parse(k);
+    $("ceTitle").textContent = `${d.getMonth() + 1}월 ${d.getDate()}일 (${"일월화수목금토"[d.getDay()]}) 횟수`;
+    $("ceVal").value = state.days[k] || 0;
+    $("calEdit").hidden = false; render(); $("ceVal").focus(); $("ceVal").select();
+  }
+  function closeEdit() { editKey = null; $("calEdit").hidden = true; render(); }
+  $("cal").addEventListener("click", e => { const c = e.target.closest("[data-k]"); if (c) openEdit(c.dataset.k); });
+  $("cal").addEventListener("keydown", e => { const c = e.target.closest("[data-k]"); if (c && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openEdit(c.dataset.k); } });
+  $("ceMinus").onclick = () => $("ceVal").value = Math.max(0, (parseInt($("ceVal").value, 10) || 0) - 1);
+  $("cePlus").onclick = () => $("ceVal").value = (parseInt($("ceVal").value, 10) || 0) + 1;
+  $("ceCancel").onclick = closeEdit;
+  $("ceSave").onclick = () => {
+    if (!editKey) return;
+    const v = Math.max(0, Math.min(999, parseInt($("ceVal").value, 10) || 0));
+    if (v) state.days[editKey] = v; else delete state.days[editKey];
+    let moved = false;
+    if (v && editKey < state.start) { state.start = editKey; moved = true; }   // 시작일보다 앞선 기록이면 1년 시작일을 그날로
+    const d = parse(editKey);
+    closeEdit(); queueSave();
+    toast(moved ? `${d.getMonth() + 1}/${d.getDate()} ${v}회 저장 · 1년 시작일도 이날로 바꿨어요` : `${d.getMonth() + 1}/${d.getDate()} ${v}회로 저장했어요`);
+  };
+  $("ceVal").addEventListener("keydown", e => { if (e.key === "Enter") $("ceSave").click(); });
+
   $("calPrev").onclick = () => { calMonth.setMonth(calMonth.getMonth() - 1); render(); };
   $("calNext").onclick = () => { calMonth.setMonth(calMonth.getMonth() + 1); render(); };
 
