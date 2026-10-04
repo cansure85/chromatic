@@ -1,5 +1,5 @@
 // 오프라인에서도 열리게 하고, 온라인이면 항상 새 버전을 먼저 받아옴
-const CACHE = "chromatic-v7";
+const CACHE = "chromatic-v8";
 const CORE = ["./", "./index.html", "./manifest.json", "./icon-d-180.png", "./icon-d-192.png", "./icon-d-512.png"];
 
 self.addEventListener("install", e => {
