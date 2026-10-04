@@ -99,6 +99,12 @@ input { background: var(--bg); border: 1px solid var(--line); border-radius: 10p
 .hours { width: 100%; height: auto; display: block; }
 .hours text { fill: var(--muted); font: 9px var(--f-body); }
 .todaytimes { font-size: 13px; color: var(--muted); min-height: 1.2em; }
+.sess { display: grid; gap: 8px; }
+.srow { display: grid; grid-template-columns: minmax(0,1fr) auto auto auto auto; gap: 6px; align-items: center; }
+.srow input[type=time] { min-width: 0; width: 100%; }
+.srow input[type=number] { width: 64px; text-align: center; font: 500 16px var(--f-mono); }
+.srow .x { padding: 6px 10px; color: var(--muted); }
+.sesstotal { font-size: 14px; }
 .pchips { display: flex; flex-wrap: wrap; gap: 6px; }
 .pchips button { padding: 6px 12px; font-size: 13px; border-radius: 999px; }
 .pchips button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
@@ -252,13 +258,12 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     <button class="addpast" id="addPast">+ 지난 날 기록 쓰기</button>
     <div class="caledit" id="calEdit" hidden>
       <div class="row spread"><b id="ceTitle"></b><input type="date" id="ceDate" aria-label="기록할 날짜" style="width:auto"></div>
-      <div class="row">
-        <button id="ceMinus" aria-label="1 빼기">−1</button>
-        <input type="number" id="ceVal" min="0" max="999" inputmode="numeric" aria-label="그날 횟수">
-        <button id="cePlus" aria-label="1 더하기">+1</button>
-        <span class="note">회</span>
+      <div class="field"><span class="note">연습한 시간과 횟수 (시작한 시각 기준, 시각은 몰라도 돼요)</span></div>
+      <div class="sess" id="ceSess"></div>
+      <div class="row spread">
+        <button type="button" id="ceAdd">+ 연습 한 번 더 추가</button>
+        <b class="sesstotal" id="ceTotal">합계 0회</b>
       </div>
-      <div class="field"><span class="note">언제 연습했나요? (선택)</span><div class="pchips" id="cePeriod"></div></div>
       <textarea id="ceMemo" maxlength="500" placeholder="그날 연습 메모 (선택)"></textarea>
       <div class="row">
         <button class="save" id="ceSave">저장</button>
@@ -338,8 +343,22 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
   };
 
   // 상태: { start: "YYYY-MM-DD", days: { "YYYY-MM-DD": 횟수 } }
-  let state = { start: ymd(new Date()), days: {}, notes: {}, times: {} };  // times: { 날짜: { 시(0~23): 횟수 } }
+  let state = { start: ymd(new Date()), days: {}, notes: {}, sessions: {} };  // sessions: { 날짜: [{ t: "05:02"(시작 시각, 모르면 ""), n: 횟수, last: 마지막 누른 시각 }] }
   let save = async () => ls.set("chromatic", state);
+  // 예전 형식(시간별 횟수 times)을 연습 묶음(sessions)으로 바꿈
+  function migrate(st) {
+    if (!st.notes) st.notes = {};
+    if (!st.sessions) st.sessions = {};
+    if (st.times) {
+      for (const [k, t] of Object.entries(st.times)) {
+        if (st.sessions[k] || !t || typeof t !== "object") continue;
+        const list = Object.entries(t).filter(([, c]) => c > 0).map(([h, c]) => ({ t: `${String(h).padStart(2, "0")}:00`, n: Math.round(c) }))
+          .sort((a, b) => a.t.localeCompare(b.t));
+        if (list.length) st.sessions[k] = list;
+      }
+      delete st.times;
+    }
+  }
 
   function toast(msg) {
     const t = $("toast"); t.textContent = msg; t.hidden = false;
@@ -575,38 +594,60 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     editKey = k; const d = parse(k);
     $("ceTitle").textContent = `${d.getMonth() + 1}월 ${d.getDate()}일 (${"일월화수목금토"[d.getDay()]})`;
     $("ceDate").value = k; $("ceDate").max = ymd(new Date());
-    $("ceVal").value = state.days[k] || 0;
     $("ceMemo").value = state.notes[k] || "";
-    cePeriod = mainPeriod(state.times[k]); drawPeriodChips();
+    const ss = (state.sessions[k] || []).map(x => ({ t: x.t || "", n: x.n }));
+    const known = ss.reduce((a, b) => a + b.n, 0), total = state.days[k] || 0;
+    if (total > known) ss.push({ t: "", n: total - known });          // 시각 없이 들어간 횟수
+    rows = ss.length ? ss : [{ t: "", n: 0 }];
+    drawRows();
     if (k.slice(0, 7) !== ymd(calMonth).slice(0, 7)) { calMonth = parse(k); calMonth.setDate(1); }
-    $("calEdit").hidden = false; render(); $("ceVal").focus(); $("ceVal").select();
+    $("calEdit").hidden = false; render();
   }
   $("ceDate").onchange = () => { const k = $("ceDate").value; if (k && k <= ymd(new Date())) openEdit(k); };
   $("addPast").onclick = () => { const y = new Date(); y.setDate(y.getDate() - 1); openEdit(ymd(y)); $("calEdit").scrollIntoView({ block: "nearest" }); };
   function closeEdit() { editKey = null; $("calEdit").hidden = true; render(); }
   $("cal").addEventListener("click", e => { const c = e.target.closest("[data-k]"); if (c) openEdit(c.dataset.k); });
   $("cal").addEventListener("keydown", e => { const c = e.target.closest("[data-k]"); if (c && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openEdit(c.dataset.k); } });
-  $("ceMinus").onclick = () => $("ceVal").value = Math.max(0, (parseInt($("ceVal").value, 10) || 0) - 1);
-  $("cePlus").onclick = () => $("ceVal").value = (parseInt($("ceVal").value, 10) || 0) + 1;
+  // 연습 묶음 입력 줄: [시작 시각] [−] [횟수] [+] [×]
+  let rows = [];
+  function drawRows() {
+    $("ceSess").innerHTML = rows.map((r, i) => `<div class="srow" data-i="${i}">
+      <input type="time" value="${r.t}" data-f="t" aria-label="${i + 1}번째 연습 시작 시각">
+      <button type="button" data-a="-1" aria-label="1 빼기">−</button>
+      <input type="number" min="0" max="999" inputmode="numeric" value="${r.n || ""}" placeholder="0" data-f="n" aria-label="${i + 1}번째 연습 횟수">
+      <button type="button" data-a="1" aria-label="1 더하기">+</button>
+      <button type="button" class="x" data-a="x" aria-label="이 줄 지우기">×</button></div>`).join("");
+    drawTotal();
+  }
+  const rowsTotal = () => rows.reduce((a, r) => a + (r.n || 0), 0);
+  function drawTotal() { $("ceTotal").textContent = `합계 ${rowsTotal()}회`; }
+  $("ceSess").addEventListener("input", e => {
+    const row = e.target.closest(".srow"); if (!row) return; const r = rows[+row.dataset.i];
+    if (e.target.dataset.f === "t") r.t = e.target.value; else r.n = Math.max(0, Math.min(999, parseInt(e.target.value, 10) || 0));
+    drawTotal();
+  });
+  $("ceSess").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return; const i = +b.closest(".srow").dataset.i;
+    if (b.dataset.a === "x") { rows.splice(i, 1); if (!rows.length) rows.push({ t: "", n: 0 }); }
+    else rows[i].n = Math.max(0, (rows[i].n || 0) + +b.dataset.a);
+    drawRows();
+  });
+  $("ceAdd").onclick = () => { rows.push({ t: "", n: 0 }); drawRows(); $("ceSess").lastElementChild.querySelector("input").focus(); };
   $("ceCancel").onclick = closeEdit;
   $("ceSave").onclick = () => {
     if (!editKey) return;
-    const v = Math.max(0, Math.min(999, parseInt($("ceVal").value, 10) || 0));
+    const keep = rows.filter(r => r.n > 0).map(r => ({ t: r.t || "", n: r.n })).sort((a, b) => (a.t || "99").localeCompare(b.t || "99"));
+    const v = Math.min(999, keep.reduce((a, r) => a + r.n, 0));
     if (v) state.days[editKey] = v; else delete state.days[editKey];
     const memo = $("ceMemo").value.trim();
     if (memo) state.notes[editKey] = memo; else delete state.notes[editKey];
-    // 시간대: 고른 시간대가 있으면 그 시간대로 기록, 없으면 기존 기록을 횟수에 맞춰 유지
-    const old = state.times[editKey] || {}, oldSum = Object.values(old).reduce((a, b) => a + b, 0);
-    if (!v) delete state.times[editKey];
-    else if (cePeriod !== null && (mainPeriod(old) !== cePeriod || oldSum !== v)) state.times[editKey] = { [PERIODS[cePeriod].rep]: v };
-    else if (oldSum !== v && oldSum > 0) { const h = Object.keys(old).sort((a, b) => old[b] - old[a])[0]; state.times[editKey] = { ...old, [h]: old[h] + (v - oldSum) }; if (state.times[editKey][h] <= 0) state.times[editKey] = { [h]: v }; }
+    if (keep.length) state.sessions[editKey] = keep; else delete state.sessions[editKey];
     let moved = false;
     if (v && editKey < state.start) { state.start = editKey; moved = true; }   // 시작일보다 앞선 기록이면 1년 시작일을 그날로
     const d = parse(editKey);
     closeEdit(); queueSave();
     toast(moved ? `${d.getMonth() + 1}/${d.getDate()} ${v}회 저장 · 1년 시작일도 이날로 바꿨어요` : `${d.getMonth() + 1}/${d.getDate()} ${v}회${memo ? " · 메모" : ""} 저장했어요`);
   };
-  $("ceVal").addEventListener("keydown", e => { if (e.key === "Enter") $("ceSave").click(); });
 
   // 오늘 메모: 입력을 멈추면 자동 저장
   const esc = t => String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -632,7 +673,7 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
 
   // ---------- 기록 옮기기 (백업 코드) ----------
   $("bkCopy").onclick = async () => {
-    const json = JSON.stringify({ start: state.start, days: state.days, notes: state.notes, times: state.times });
+    const json = JSON.stringify({ start: state.start, days: state.days, notes: state.notes, sessions: state.sessions });
     const code = "CHROMATIC5000-" + btoa(unescape(encodeURIComponent(json)));   // 따옴표 없는 코드라 폰에서 글자가 바뀌지 않음
     try { await navigator.clipboard.writeText(code); toast("기록을 복사했어요. 새 앱에서 '기록 붙여넣기'를 누르세요"); }
     catch { $("bkBox").hidden = false; $("bkText").value = code; $("bkText").select(); $("bkMsg").textContent = "자동 복사가 안 돼서 아래 글자를 직접 복사해 주세요."; }
@@ -667,11 +708,13 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     const days = {}; for (const [k, v] of Object.entries(d.days)) if (/^\d{4}-\d{2}-\d{2}$/.test(k) && v > 0) days[k] = Math.min(999, Math.round(v));
     const notes = {}; for (const [k, v] of Object.entries(d.notes || {})) if (/^\d{4}-\d{2}-\d{2}$/.test(k) && v) notes[k] = String(v).slice(0, 500);
     const n = Object.values(days).reduce((a, b) => a + b, 0);
-    const times = {};
-    for (const [k, h] of Object.entries(d.times || {})) if (/^\d{4}-\d{2}-\d{2}$/.test(k) && h && typeof h === "object") {
-      const o = {}; for (const [hr, c] of Object.entries(h)) if (+hr >= 0 && +hr < 24 && c > 0) o[+hr] = Math.round(c); if (Object.keys(o).length) times[k] = o;
+    const sessions = {};
+    for (const [k, list] of Object.entries(d.sessions || {})) if (/^\d{4}-\d{2}-\d{2}$/.test(k) && Array.isArray(list)) {
+      const ok = list.filter(x => x && x.n > 0).map(x => ({ t: /^\d{2}:\d{2}$/.test(x.t || "") ? x.t : "", n: Math.round(x.n) }));
+      if (ok.length) sessions[k] = ok;
     }
-    pending = { start: /^\d{4}-\d{2}-\d{2}$/.test(d.start || "") ? d.start : state.start, days, notes, times };
+    pending = { start: /^\d{4}-\d{2}-\d{2}$/.test(d.start || "") ? d.start : state.start, days, notes, sessions, times: d.times };
+    migrate(pending);
     $("bkMsg").textContent = "";
     $("bkSummary").textContent = `${fmt(n)}회 · ${Object.keys(days).length}일 · 메모 ${Object.keys(notes).length}개 기록을 찾았어요`;
     $("bkConfirm").hidden = false;
@@ -778,16 +821,7 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     { name: "저녁", from: 18, to: 24, rep: 21 }
   ];
   const periodOf = h => PERIODS.findIndex(p => h >= p.from && h < p.to);
-  function mainPeriod(t) {
-    if (!t) return null; const c = [0, 0, 0, 0];
-    for (const [h, n] of Object.entries(t)) c[periodOf(+h)] += n;
-    const m = Math.max(...c); return m > 0 ? c.indexOf(m) : null;
-  }
-  let cePeriod = null;
-  function drawPeriodChips() {
-    $("cePeriod").innerHTML = PERIODS.map((p, i) => `<button type="button" aria-pressed="${i === cePeriod}" data-p="${i}">${p.name}</button>`).join("");
-  }
-  $("cePeriod").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; const i = +b.dataset.p; cePeriod = cePeriod === i ? null : i; drawPeriodChips(); });
+  const timeLabel = t => { const [h, m] = t.split(":").map(Number); const base = hourLabel(h).replace(/시$/, ""); return m ? `${base}:${pad(m)}` : `${base}시`; };
   const hourLabel = h => h === 0 ? "밤 12시" : h < 6 ? `새벽 ${h}시` : h < 12 ? `오전 ${h}시` : h === 12 ? "낮 12시" : h < 18 ? `오후 ${h - 12}시` : `저녁 ${h - 12}시`;
   let tRange = ls.get("times.range", "month");
   const RANGES = { week: "이번 주", month: "이번 달", all: "전체" };
@@ -796,7 +830,7 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     $("tRange").innerHTML = Object.entries(RANGES).map(([k, v]) => `<button aria-pressed="${k === tRange}" data-r="${k}">${v}</button>`).join("");
     const from = tRange === "week" ? s.mon : tRange === "month" ? s.today.slice(0, 8) + "01" : "0000";
     const hrs = new Array(24).fill(0);
-    for (const [k, t] of Object.entries(state.times)) if (k >= from && k <= s.today) for (const [h, n] of Object.entries(t)) hrs[+h] += n;
+    for (const [k, list] of Object.entries(state.sessions)) if (k >= from && k <= s.today) for (const x of list) if (x.t) hrs[parseInt(x.t, 10)] += x.n;
     const per = PERIODS.map(p => hrs.slice(p.from, p.to).reduce((a, b) => a + b, 0));
     const tot = per.reduce((a, b) => a + b, 0), top = Math.max(...per);
     $("times").innerHTML = PERIODS.map((p, i) => `<div><div class="bar"><i class="${per[i] && per[i] === top ? "top" : ""}" style="height:${top ? per[i] / top * 100 : 0}%"></i></div><b>${per[i]}</b>${p.name}</div>`).join("");
@@ -809,15 +843,14 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
       if (h % 6 === 0) g += `<text x="${L + h * bw + 1}" y="${H - 2}">${h}시</text>`;
     });
     $("hours").innerHTML = g;
-    if (!tot) { $("timesNote").textContent = "+1을 누르면 몇 시에 연습했는지 자동으로 기록돼요."; return; }
+    if (!tot) { $("timesNote").textContent = "+1을 누르면 연습을 시작한 시각이 자동으로 기록돼요."; return; }
     const bestH = hrs.indexOf(Math.max(...hrs));
     $("timesNote").textContent = `${RANGES[tRange]} 가장 많이 연습한 때는 ${PERIODS[per.indexOf(top)].name}, 특히 ${hourLabel(bestH)} 무렵이에요.`;
   }
   function drawTodayTimes(s) {
-    const t = state.times[s.today];
-    if (!t) { $("todayTimes").textContent = ""; return; }
-    const hs = Object.keys(t).map(Number).sort((a, b) => a - b);
-    $("todayTimes").textContent = "오늘 연습: " + hs.map(h => `${hourLabel(h)} ${t[h]}회`).join(" · ");
+    const list = state.sessions[s.today];
+    if (!list || !list.length) { $("todayTimes").textContent = ""; return; }
+    $("todayTimes").textContent = "오늘 연습: " + list.map(x => x.t ? `${timeLabel(x.t)}부터 ${x.n}회` : `${x.n}회`).join(" · ");
   }
 
   // ---------- 환영 화면: 들어올 때마다 다른 한마디 ----------
@@ -901,13 +934,15 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     const v = Math.max(0, before + n);
     if (v === before) return;
     if (v) state.days[k] = v; else delete state.days[k];
-    const t = state.times[k] || (state.times[k] = {});
-    if (n > 0) { const h = new Date().getHours(); t[h] = (t[h] || 0) + 1; }
-    else {                                                  // −1은 가장 최근 시간대에서 뺌
-      const hs = Object.keys(t).map(Number).sort((a, b) => b - a);
-      if (hs.length) { t[hs[0]]--; if (t[hs[0]] <= 0) delete t[hs[0]]; }
+    const list = state.sessions[k] || (state.sessions[k] = []);
+    const now = Date.now(), cur = list[list.length - 1];
+    if (n > 0) {
+      if (cur && cur.last && now - cur.last < 30 * 60 * 1000) { cur.n++; cur.last = now; }
+      else { const d = new Date(); list.push({ t: `${pad(d.getHours())}:${pad(d.getMinutes())}`, n: 1, last: now }); }
+    } else if (cur) {                                           // −1은 가장 최근 연습에서 뺌
+      cur.n--; if (cur.n <= 0) list.pop();
     }
-    if (!Object.keys(t).length) delete state.times[k];
+    if (!list.length) delete state.sessions[k];
     render(); queueSave();
     if (n > 0 && v === GOAL.day) toast(`오늘 ${GOAL.day}회 달성!`);
     const s = sums();
@@ -946,7 +981,7 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
   }
   state = ls.get("chromatic", state);
   if (!state.notes) state.notes = {};
-  if (!state.times) state.times = {};
+  migrate(state);
   render();
   showSplash();
   (async () => {
@@ -956,7 +991,7 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     if (!db || !uid || canWrite === false) { goLocal(); return; }
     const ref = db.doc(`data/users/${uid}/chromatic`);
     save = async () => {
-      try { await ref.set({ start: state.start, days: state.days, notes: state.notes, times: state.times }); }
+      try { await ref.set({ start: state.start, days: state.days, notes: state.notes, sessions: state.sessions }); }
       catch (e) {
         if (e?.code === "invalid_argument" || e?.code === "not_granted" || e?.code === "revoked") { goLocal(); return; }
         throw e;
@@ -964,7 +999,7 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     };
     unsub = ref.onSnapshot(snap => {
       if (snap.metadata.hasPendingWrites || timer || saving) return; // 저장 대기 중인 탭이 있으면 화면 값을 유지
-      if (snap.exists) { const d = snap.data(); state = { start: d.start || state.start, days: { ...(d.days || {}) }, notes: { ...(d.notes || {}) }, times: JSON.parse(JSON.stringify(d.times || {})) }; render(); }
+      if (snap.exists) { const d = snap.data(); state = { start: d.start || state.start, days: { ...(d.days || {}) }, notes: { ...(d.notes || {}) }, sessions: JSON.parse(JSON.stringify(d.sessions || {})), times: d.times }; migrate(state); render(); }
       else if (Object.keys(state.days).length) flush(); // 이 기기에 있던 기록을 계정으로 옮김
     }, () => goLocal());
   })();
