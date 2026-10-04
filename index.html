@@ -966,10 +966,10 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
   function chimeOut() {
     if (fx) return fx;
     const out = ac.createGain(); out.gain.value = 0.9;
-    const dly = ac.createDelay(1); dly.delayTime.value = 0.23;
-    const fb = ac.createGain(); fb.gain.value = 0.32;
-    const tone = ac.createBiquadFilter(); tone.type = "lowpass"; tone.frequency.value = 2600;
-    const wet = ac.createGain(); wet.gain.value = 0.28;
+    const dly = ac.createDelay(1); dly.delayTime.value = 0.19;
+    const fb = ac.createGain(); fb.gain.value = 0.22;
+    const tone = ac.createBiquadFilter(); tone.type = "lowpass"; tone.frequency.value = 5000;
+    const wet = ac.createGain(); wet.gain.value = 0.14;
     out.connect(ac.destination);
     out.connect(dly); dly.connect(tone).connect(fb).connect(dly); tone.connect(wet).connect(ac.destination);
     return (fx = out);
@@ -980,14 +980,20 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     const t = ac.currentTime + 0.01 + when, out = chimeOut();
     const env = ac.createGain();
     env.gain.setValueAtTime(0.0001, t);
-    env.gain.linearRampToValueAtTime(vol, t + 0.012);
-    env.gain.exponentialRampToValueAtTime(0.0001, t + 1.8);
+    env.gain.linearRampToValueAtTime(vol, t + 0.003);                     // 빠르게 시작해 또렷하게
+    env.gain.exponentialRampToValueAtTime(vol * 0.35, t + 0.12);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + 1.3);
     env.connect(out);
-    [[1, 1], [2.0, 0.22], [3.01, 0.07], [1.003, 0.5]].forEach(([m, a]) => {   // 기본음 + 옅은 배음 + 살짝 어긋난 음(반짝임)
+    [[1, 1], [2.0, 0.3], [3.0, 0.1], [1.002, 0.2]].forEach(([m, a]) => {     // 기본음 + 맑은 배음 + 아주 옅은 반짝임
       const o = ac.createOscillator(), g = ac.createGain();
       o.type = "sine"; o.frequency.value = freq * m; g.gain.value = a;
-      o.connect(g).connect(env); o.start(t); o.stop(t + 1.9);
+      o.connect(g).connect(env); o.start(t); o.stop(t + 1.4);
     });
+    // 첫 순간의 '팅' 하는 맑은 울림 (아주 짧게)
+    const hi = ac.createOscillator(), hg = ac.createGain();
+    hi.type = "sine"; hi.frequency.value = freq * 4.0;
+    hg.gain.setValueAtTime(0.0001, t); hg.gain.linearRampToValueAtTime(vol * 0.35, t + 0.002); hg.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    hi.connect(hg).connect(out); hi.start(t); hi.stop(t + 0.1);
   }
   // 누를수록 별처럼 올라가는 오음 음계 (도 레 미 솔 라)
   const STAR = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21];
@@ -995,9 +1001,9 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
   function tapSound(n, v) {
     if (!tapOn) return;
     try {
-      if (n < 0) { chime(hz(-5), 0.22); return; }
-      if (v === GOAL.day) { [0, 4, 7, 12, 16].forEach((x, i) => chime(hz(x), 0.32, i * 0.11)); return; }   // 하루 목표: 반짝이는 아르페지오
-      chime(hz(STAR[(v - 1) % STAR.length]), 0.38);
+      if (n < 0) { chime(hz(-5), 0.3); return; }
+      if (v === GOAL.day) { [0, 4, 7, 12, 16].forEach((x, i) => chime(hz(x), 0.45, i * 0.11)); return; }   // 하루 목표: 반짝이는 아르페지오
+      chime(hz(STAR[(v - 1) % STAR.length]), 0.55);
     } catch {}
   }
   $("plus").onclick = () => { const before = state.days[ymd(new Date())] || 0; change(1); tapSound(1, before + 1); };
