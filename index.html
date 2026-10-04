@@ -68,6 +68,9 @@ input { background: var(--bg); border: 1px solid var(--line); border-radius: 10p
 .plus { width: 100%; max-width: 320px; padding: 22px; font-size: 26px; font-weight: 600; background: var(--accent); border-color: var(--accent); color: #fff; border-radius: 18px; touch-action: manipulation; }
 .plus:active { transform: scale(.98); }
 .minus { font-size: 14px; padding: 6px 14px; color: var(--muted); }
+.subrow { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.sndbtn { font-size: 14px; padding: 6px 14px; color: var(--muted); }
+.sndbtn[aria-pressed="true"] { color: var(--ink); border-color: var(--accent); }
 
 /* 진행 막대 */
 .bars { display: grid; grid-template-columns: auto 1fr auto; gap: 10px 12px; align-items: center; }
@@ -197,7 +200,10 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     <div class="note" id="todayNote">하루 목표 15회</div>
     <div class="todaytimes" id="todayTimes"></div>
     <button class="plus" id="plus">+1 크로매틱</button>
-    <button class="minus" id="minus">잘못 눌렀어요 −1</button>
+    <div class="subrow">
+      <button class="minus" id="minus">잘못 눌렀어요 −1</button>
+      <button class="sndbtn" id="tapSnd" aria-pressed="true">🔔 소리 켜짐</button>
+    </div>
     <label class="field" style="width:100%;text-align:left;display:grid;gap:4px">
       <span class="note">오늘 연습 메모</span>
       <textarea id="todayMemo" maxlength="500" placeholder="예: 3프렛부터 손가락 꼬임. 80 BPM에서 깔끔하게 됨"></textarea>
@@ -948,8 +954,43 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     const s = sums();
     if (n > 0 && s.w === GOAL.week) toast(`이번 주 ${GOAL.week}회 달성!`);
   }
-  $("plus").onclick = () => change(1);
-  $("minus").onclick = () => change(-1);
+  // ---------- +1 효과음: 줄을 튕기는 소리로 반음씩 올라감 (크로매틱처럼) ----------
+  let tapOn = ls.get("tap.sound", true);
+  function drawTapBtn() { $("tapSnd").setAttribute("aria-pressed", tapOn); $("tapSnd").textContent = tapOn ? "🔔 소리 켜짐" : "🔕 소리 꺼짐"; }
+  $("tapSnd").onclick = () => { tapOn = !tapOn; ls.set("tap.sound", tapOn); drawTapBtn(); if (tapOn) pluck(0, 0.5); };
+  drawTapBtn();
+  const pluckCache = {};
+  function pluckBuffer(freq) {
+    // 카플러스-스트롱: 짧은 잡음을 되먹임시켜 줄 튕기는 소리를 만듦
+    if (pluckCache[freq]) return pluckCache[freq];
+    const sr = ac.sampleRate, len = Math.round(sr * 1.1), p = Math.max(2, Math.round(sr / freq));
+    const buf = ac.createBuffer(1, len, sr), out = buf.getChannelData(0), ring = new Float32Array(p);
+    for (let i = 0; i < p; i++) ring[i] = Math.random() * 2 - 1;
+    for (let i = 0, j = 0; i < len; i++) {
+      const nx = (j + 1) % p, v = ring[j];
+      out[i] = v; ring[j] = 0.4985 * (v + ring[nx]); j = nx;
+    }
+    return (pluckCache[freq] = buf);
+  }
+  function pluck(semi, vol = 0.8, when = 0) {
+    if (!ac) setupAudio();
+    if (ac.state !== "running") ac.resume();
+    const src = ac.createBufferSource(); src.buffer = pluckBuffer(Math.round(261.63 * Math.pow(2, semi / 12)));  // C4 기준
+    const g = ac.createGain(); g.gain.value = vol;
+    const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 4200;
+    src.connect(lp).connect(g).connect(ac.destination);
+    src.start(ac.currentTime + when);
+  }
+  function tapSound(n, v) {
+    if (!tapOn) return;
+    try {
+      if (n < 0) { pluck(-12, 0.45); return; }
+      if (v === GOAL.day) { [0, 4, 7, 12].forEach((x, i) => pluck(x, 0.7, i * 0.09)); return; }   // 하루 목표: 화음
+      pluck(((v - 1) % 13), 0.8);                                                             // 도·도#·레… 한 옥타브씩
+    } catch {}
+  }
+  $("plus").onclick = () => { const before = state.days[ymd(new Date())] || 0; change(1); tapSound(1, before + 1); };
+  $("minus").onclick = () => { const before = state.days[ymd(new Date())] || 0; change(-1); if (before > 0) tapSound(-1, before - 1); };
   $("start").onchange = () => { if ($("start").value) { state.start = $("start").value; render(); queueSave(); } };
 
   // 연타해도 한 번에 묶어서 저장
