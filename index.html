@@ -97,6 +97,17 @@ input[type=range] { width: 100%; accent-color: var(--accent); background: none; 
 .cal .hit { background: var(--accent); }
 .cal .hit .d, .cal .hit .n { color: #fff; }
 .cal .today { outline: 2px solid var(--koa); outline-offset: 1px; }
+.cal div { position: relative; }
+.cal .memo::after { content: ""; position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--koa); }
+.cal .hit.memo::after { background: #fff; }
+textarea { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; width: 100%; min-width: 0; resize: vertical; min-height: 64px; box-sizing: border-box; }
+.caledit textarea { background: var(--surface); }
+.memos { display: grid; gap: 0; }
+.memos div { display: grid; grid-template-columns: auto 1fr; gap: 10px; padding-block: 8px; border-top: 1px solid var(--line); font-size: 14px; }
+.memos div:first-child { border-top: none; }
+.memos b { font: 500 13px var(--f-mono); color: var(--muted); white-space: nowrap; }
+.memos span { white-space: pre-wrap; overflow-wrap: anywhere; }
+.addpast { justify-self: start; font-size: 14px; }
 .cal .future { opacity: .45; }
 .navbtn { padding: 4px 12px; font-size: 18px; line-height: 1; }
 .cal .tap { cursor: pointer; }
@@ -138,6 +149,10 @@ input[type=range] { width: 100%; accent-color: var(--accent); background: none; 
     <div class="note" id="todayNote">하루 목표 15회</div>
     <button class="plus" id="plus">+1 크로매틱</button>
     <button class="minus" id="minus">잘못 눌렀어요 −1</button>
+    <label class="field" style="width:100%;text-align:left;display:grid;gap:4px">
+      <span class="note">오늘 연습 메모</span>
+      <textarea id="todayMemo" maxlength="500" placeholder="예: 3프렛부터 손가락 꼬임. 80 BPM에서 깔끔하게 됨"></textarea>
+    </label>
   </section>
 
   <section class="card metro" aria-labelledby="mTitle">
@@ -190,20 +205,27 @@ input[type=range] { width: 100%; accent-color: var(--accent); background: none; 
       <button class="ghost navbtn" id="calNext" aria-label="다음 달">›</button>
     </div>
     <div class="cal" id="cal"></div>
-    <div class="row spread note"><span id="calSum"></span><span>날짜를 누르면 횟수를 고칠 수 있어요</span></div>
+    <div class="row spread note"><span id="calSum"></span><span>날짜를 누르면 횟수와 메모를 쓸 수 있어요</span></div>
+    <button class="addpast" id="addPast">+ 지난 날 기록 쓰기</button>
     <div class="caledit" id="calEdit" hidden>
-      <b id="ceTitle"></b>
+      <div class="row spread"><b id="ceTitle"></b><input type="date" id="ceDate" aria-label="기록할 날짜" style="width:auto"></div>
       <div class="row">
         <button id="ceMinus" aria-label="1 빼기">−1</button>
         <input type="number" id="ceVal" min="0" max="999" inputmode="numeric" aria-label="그날 횟수">
         <button id="cePlus" aria-label="1 더하기">+1</button>
         <span class="note">회</span>
       </div>
+      <textarea id="ceMemo" maxlength="500" placeholder="그날 연습 메모 (선택)"></textarea>
       <div class="row">
         <button class="save" id="ceSave">저장</button>
         <button id="ceCancel">닫기</button>
       </div>
     </div>
+  </section>
+
+  <section class="card" aria-labelledby="memoTitle">
+    <h2 id="memoTitle">연습 메모</h2>
+    <div class="memos" id="memos"></div>
   </section>
 
   <section class="card" aria-labelledby="cTitle">
@@ -239,7 +261,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); background: none; 
   };
 
   // 상태: { start: "YYYY-MM-DD", days: { "YYYY-MM-DD": 횟수 } }
-  let state = { start: ymd(new Date()), days: {} };
+  let state = { start: ymd(new Date()), days: {}, notes: {} };
   let save = async () => ls.set("chromatic", state);
 
   function toast(msg) {
@@ -293,6 +315,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); background: none; 
 
     drawAcc(s);
     drawCal(s);
+    drawMemos();
     $("start").value = state.start;
   }
 
@@ -463,7 +486,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); background: none; 
       sum += v; if (v >= GOAL.day) hit++;
       const cls = [v >= GOAL.day ? "hit" : v > 0 ? "some" : "", k === s.today ? "today" : "", k > s.today ? "future" : ""].join(" ");
       const tap = k <= s.today ? ` tap" data-k="${k}" role="button" tabindex="0" aria-label="${mo + 1}월 ${d}일 ${v}회` : "";
-      h += `<div class="${cls}${k === editKey ? " sel" : ""}${tap}" title="${k} · ${v}회"><span class="d">${d}</span><span class="n">${v || ""}</span></div>`;
+      h += `<div class="${cls}${state.notes[k] ? " memo" : ""}${k === editKey ? " sel" : ""}${tap}" title="${k} · ${v}회"><span class="d">${d}</span><span class="n">${v || ""}</span></div>`;
     }
     $("cal").innerHTML = h;
     $("calSum").textContent = `이달 ${fmt(sum)}회 · 목표 달성 ${hit}일`;
@@ -472,10 +495,15 @@ input[type=range] { width: 100%; accent-color: var(--accent); background: none; 
   let editKey = null;
   function openEdit(k) {
     editKey = k; const d = parse(k);
-    $("ceTitle").textContent = `${d.getMonth() + 1}월 ${d.getDate()}일 (${"일월화수목금토"[d.getDay()]}) 횟수`;
+    $("ceTitle").textContent = `${d.getMonth() + 1}월 ${d.getDate()}일 (${"일월화수목금토"[d.getDay()]})`;
+    $("ceDate").value = k; $("ceDate").max = ymd(new Date());
     $("ceVal").value = state.days[k] || 0;
+    $("ceMemo").value = state.notes[k] || "";
+    if (k.slice(0, 7) !== ymd(calMonth).slice(0, 7)) { calMonth = parse(k); calMonth.setDate(1); }
     $("calEdit").hidden = false; render(); $("ceVal").focus(); $("ceVal").select();
   }
+  $("ceDate").onchange = () => { const k = $("ceDate").value; if (k && k <= ymd(new Date())) openEdit(k); };
+  $("addPast").onclick = () => { const y = new Date(); y.setDate(y.getDate() - 1); openEdit(ymd(y)); $("calEdit").scrollIntoView({ block: "nearest" }); };
   function closeEdit() { editKey = null; $("calEdit").hidden = true; render(); }
   $("cal").addEventListener("click", e => { const c = e.target.closest("[data-k]"); if (c) openEdit(c.dataset.k); });
   $("cal").addEventListener("keydown", e => { const c = e.target.closest("[data-k]"); if (c && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openEdit(c.dataset.k); } });
@@ -486,13 +514,36 @@ input[type=range] { width: 100%; accent-color: var(--accent); background: none; 
     if (!editKey) return;
     const v = Math.max(0, Math.min(999, parseInt($("ceVal").value, 10) || 0));
     if (v) state.days[editKey] = v; else delete state.days[editKey];
+    const memo = $("ceMemo").value.trim();
+    if (memo) state.notes[editKey] = memo; else delete state.notes[editKey];
     let moved = false;
     if (v && editKey < state.start) { state.start = editKey; moved = true; }   // 시작일보다 앞선 기록이면 1년 시작일을 그날로
     const d = parse(editKey);
     closeEdit(); queueSave();
-    toast(moved ? `${d.getMonth() + 1}/${d.getDate()} ${v}회 저장 · 1년 시작일도 이날로 바꿨어요` : `${d.getMonth() + 1}/${d.getDate()} ${v}회로 저장했어요`);
+    toast(moved ? `${d.getMonth() + 1}/${d.getDate()} ${v}회 저장 · 1년 시작일도 이날로 바꿨어요` : `${d.getMonth() + 1}/${d.getDate()} ${v}회${memo ? " · 메모" : ""} 저장했어요`);
   };
   $("ceVal").addEventListener("keydown", e => { if (e.key === "Enter") $("ceSave").click(); });
+
+  // 오늘 메모: 입력을 멈추면 자동 저장
+  const esc = t => String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  let memoTimer = null;
+  $("todayMemo").addEventListener("input", () => {
+    clearTimeout(memoTimer);
+    memoTimer = setTimeout(() => {
+      const k = ymd(new Date()), m = $("todayMemo").value.trim();
+      if (m) state.notes[k] = m; else delete state.notes[k];
+      queueSave(); drawMemos(); drawCal(sums());
+    }, 800);
+  });
+  function drawMemos() {
+    const keys = Object.keys(state.notes).sort().reverse().slice(0, 30);
+    $("memos").innerHTML = keys.length ? keys.map(k => {
+      const d = parse(k), v = state.days[k] || 0;
+      return `<div><b>${d.getMonth() + 1}/${pad(d.getDate())} · ${v}회</b><span>${esc(state.notes[k])}</span></div>`;
+    }).join("") : `<div class="note" style="display:block">아직 메모가 없어요. 오늘 메모 칸이나 달력의 날짜를 눌러 써 보세요.</div>`;
+    const t = ymd(new Date());
+    if (document.activeElement !== $("todayMemo")) $("todayMemo").value = state.notes[t] || "";
+  }
 
   $("calPrev").onclick = () => { calMonth.setMonth(calMonth.getMonth() - 1); render(); };
   $("calNext").onclick = () => { calMonth.setMonth(calMonth.getMonth() + 1); render(); };
@@ -616,6 +667,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); background: none; 
     save = localSave; ls.set("chromatic", state); banner(LOCAL_MSG);
   }
   state = ls.get("chromatic", state);
+  if (!state.notes) state.notes = {};
   render();
   (async () => {
     const [db, user] = window.claude?.use ? await Promise.all([claude.use("db"), claude.use("user")]) : [null, null];
@@ -624,7 +676,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); background: none; 
     if (!db || !uid || canWrite === false) { goLocal(); return; }
     const ref = db.doc(`data/users/${uid}/chromatic`);
     save = async () => {
-      try { await ref.set({ start: state.start, days: state.days }); }
+      try { await ref.set({ start: state.start, days: state.days, notes: state.notes }); }
       catch (e) {
         if (e?.code === "invalid_argument" || e?.code === "not_granted" || e?.code === "revoked") { goLocal(); return; }
         throw e;
@@ -632,7 +684,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); background: none; 
     };
     unsub = ref.onSnapshot(snap => {
       if (snap.metadata.hasPendingWrites || timer || saving) return; // 저장 대기 중인 탭이 있으면 화면 값을 유지
-      if (snap.exists) { const d = snap.data(); state = { start: d.start || state.start, days: { ...(d.days || {}) } }; render(); }
+      if (snap.exists) { const d = snap.data(); state = { start: d.start || state.start, days: { ...(d.days || {}) }, notes: { ...(d.notes || {}) } }; render(); }
       else if (Object.keys(state.days).length) flush(); // 이 기기에 있던 기록을 계정으로 옮김
     }, () => goLocal());
   })();
