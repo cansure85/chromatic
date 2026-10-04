@@ -114,6 +114,8 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
 .memos b { font: 500 13px var(--f-mono); color: var(--muted); white-space: nowrap; }
 .memos span { white-space: pre-wrap; overflow-wrap: anywhere; }
 .addpast { justify-self: start; font-size: 14px; }
+.bkconfirm { display: grid; gap: 8px; padding: 12px; border: 2px solid var(--accent); border-radius: 12px; background: var(--surface); }
+#bkMsg:not(:empty) { color: var(--accent); font-weight: 600; }
 .cal .future { opacity: .45; }
 .navbtn { padding: 4px 12px; font-size: 18px; line-height: 1; }
 .cal .tap { cursor: pointer; }
@@ -264,6 +266,14 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
         <button id="bkClose">닫기</button>
       </div>
       <div class="note" id="bkMsg"></div>
+      <div id="bkConfirm" class="bkconfirm" hidden>
+        <b id="bkSummary"></b>
+        <span class="note">지금 이 앱에 있는 기록은 이걸로 바뀌어요.</span>
+        <div class="row">
+          <button class="save" id="bkYes">네, 이 기록으로 바꾸기</button>
+          <button id="bkNo">취소</button>
+        </div>
+      </div>
     </div>
   </section>
 </div>
@@ -576,20 +586,36 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     catch { $("bkBox").hidden = false; $("bkText").value = code; $("bkText").select(); $("bkMsg").textContent = "자동 복사가 안 돼서 아래 글자를 직접 복사해 주세요."; }
   };
   $("bkOpen").onclick = () => { $("bkBox").hidden = false; $("bkText").value = ""; $("bkMsg").textContent = ""; $("bkText").focus(); };
-  $("bkClose").onclick = () => { $("bkBox").hidden = true; bkArmed = false; $("bkLoad").textContent = "불러오기"; };
-  let bkArmed = false;
+  $("bkClose").onclick = () => { $("bkBox").hidden = true; $("bkConfirm").hidden = true; };
+  let pending = null;
   $("bkLoad").onclick = () => {
-    const t = $("bkText").value.trim().replace(/^CHROMATIC5000:/, "");
+    $("bkText").blur();                                  // 키보드를 내려서 안내가 보이게
+    $("bkConfirm").hidden = true; pending = null;
+    const raw = $("bkText").value.trim();
+    const m = raw.match(/\{[\s\S]*\}/);                  // 앞뒤에 다른 글자가 붙어 있어도 기록 부분만
     let d;
-    try { d = JSON.parse(t); if (!d || typeof d.days !== "object") throw 0; }
-    catch { $("bkMsg").textContent = "기록 코드가 아니에요. '기록 복사하기'로 복사한 글자 전체를 붙여넣어 주세요."; return; }
-    const n = Object.values(d.days).reduce((a, b) => a + (Number(b) || 0), 0);
-    if (!bkArmed) { bkArmed = true; $("bkLoad").textContent = "덮어쓰기 확인"; $("bkMsg").textContent = `${fmt(n)}회 기록이에요. 지금 이 기기의 기록을 이걸로 바꿔요. 한 번 더 누르면 불러와요.`; return; }
-    bkArmed = false; $("bkLoad").textContent = "불러오기";
+    try { d = JSON.parse(m ? m[0] : ""); if (!d || typeof d.days !== "object") throw 0; }
+    catch {
+      $("bkMsg").textContent = raw ? "기록 코드가 아니에요. '기록 복사하기'로 복사한 글자 전체를 붙여넣어 주세요." : "먼저 복사한 기록을 위 칸에 붙여넣어 주세요.";
+      $("bkMsg").scrollIntoView({ block: "center", behavior: "smooth" }); return;
+    }
     const days = {}; for (const [k, v] of Object.entries(d.days)) if (/^\d{4}-\d{2}-\d{2}$/.test(k) && v > 0) days[k] = Math.min(999, Math.round(v));
     const notes = {}; for (const [k, v] of Object.entries(d.notes || {})) if (/^\d{4}-\d{2}-\d{2}$/.test(k) && v) notes[k] = String(v).slice(0, 500);
-    state = { start: /^\d{4}-\d{2}-\d{2}$/.test(d.start || "") ? d.start : state.start, days, notes };
-    $("bkBox").hidden = true; render(); queueSave(); toast(`${fmt(n)}회 기록을 불러왔어요`);
+    const n = Object.values(days).reduce((a, b) => a + b, 0);
+    pending = { start: /^\d{4}-\d{2}-\d{2}$/.test(d.start || "") ? d.start : state.start, days, notes };
+    $("bkMsg").textContent = "";
+    $("bkSummary").textContent = `${fmt(n)}회 · ${Object.keys(days).length}일 · 메모 ${Object.keys(notes).length}개 기록을 찾았어요`;
+    $("bkConfirm").hidden = false;
+    $("bkConfirm").scrollIntoView({ block: "center", behavior: "smooth" });
+  };
+  $("bkNo").onclick = () => { pending = null; $("bkConfirm").hidden = true; };
+  $("bkYes").onclick = () => {
+    if (!pending) return;
+    const n = Object.values(pending.days).reduce((a, b) => a + b, 0);
+    state = pending; pending = null;
+    $("bkConfirm").hidden = true; $("bkBox").hidden = true;
+    render(); queueSave(); toast(`${fmt(n)}회 기록을 불러왔어요`);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   $("calPrev").onclick = () => { calMonth.setMonth(calMonth.getMonth() - 1); render(); };
