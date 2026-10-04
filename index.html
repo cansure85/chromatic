@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="크로매틱">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>크로매틱 5000</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: 한 화면 카운터. 오늘 숫자와 +1 버튼이 중심, 아래로 오늘·주·1년 진행과 누적 그래프 */
+:root {
+  --bg: #eef3f1;
+  --surface: #ffffff;
+  --ink: #18282a;
+  --muted: #5d7073;
+  --line: #d3dfdc;
+  --accent: #c8335e;
+  --accent-soft: #f8dde5;
+  --koa: #8a5a2b;
+  --track: #e1eae7;
+  --mid: #e47f9c;
+  --ok: #2f7d5b;
+  --f-display: "Gowun Batang", "Apple SD Gothic Neo", serif;
+  --f-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111a1b; --surface: #182425; --ink: #e5eeec; --muted: #93a7a8; --line: #2a3a3b;
+  --accent: #f0688f; --accent-soft: #3d2029; --koa: #d0a271; --track: #213031; --mid: #a8466a; --ok: #6cc59a;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #111a1b; --surface: #182425; --ink: #e5eeec; --muted: #93a7a8; --line: #2a3a3b;
+  --accent: #f0688f; --accent-soft: #3d2029; --koa: #d0a271; --track: #213031; --mid: #a8466a; --ok: #6cc59a;
+  color-scheme: dark; }
+
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--f-body); }
+.wrap { max-width: 480px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 48px; display: grid; gap: 16px; }
+h1, h2 { font-family: var(--f-display); margin: 0; text-wrap: balance; }
+h1 { font-size: 24px; }
+h2 { font-size: 17px; }
+.label { font-size: 12px; letter-spacing: .06em; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.note { font-size: 13px; color: var(--muted); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px; display: grid; gap: 14px; min-width: 0; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.spread { justify-content: space-between; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); padding: 9px 14px; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; }
+
+/* 카운터 */
+.counter { text-align: center; justify-items: center; }
+.big { font-family: var(--f-mono); font-size: 84px; line-height: 1; font-variant-numeric: tabular-nums; }
+.big.done { color: var(--accent); }
+.plus { width: 100%; max-width: 320px; padding: 22px; font-size: 26px; font-weight: 600; background: var(--accent); border-color: var(--accent); color: #fff; border-radius: 18px; touch-action: manipulation; }
+.plus:active { transform: scale(.98); }
+.minus { font-size: 14px; padding: 6px 14px; color: var(--muted); }
+
+/* 진행 막대 */
+.bars { display: grid; grid-template-columns: auto 1fr auto; gap: 10px 12px; align-items: center; }
+.track { height: 12px; border-radius: 6px; background: var(--track); overflow: hidden; }
+.track i { display: block; height: 100%; border-radius: 6px; background: var(--mid); transition: width .25s; }
+.track i.full { background: var(--accent); }
+.pace { font-size: 14px; }
+.pace.ahead { color: var(--ok); } .pace.behind { color: var(--accent); }
+
+/* 이번 주 7칸 */
+.week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.week div { display: grid; gap: 2px; justify-items: center; font-size: 12px; color: var(--muted); }
+.week b { width: 100%; aspect-ratio: 1; max-width: 100%; border-radius: 10px; display: grid; place-items: center; background: var(--track); color: var(--ink); font: 500 14px var(--f-mono); }
+.week b.some { background: var(--accent-soft); }
+.week b.hit { background: var(--accent); color: #fff; }
+.week .is-today { color: var(--ink); font-weight: 600; }
+
+.fill { display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: end; }
+.pct { font-family: var(--f-mono); font-size: 44px; line-height: 1; font-variant-numeric: tabular-nums; color: var(--accent); }
+.pct small { font-size: 20px; }
+.art { width: 100%; max-width: 100%; aspect-ratio: 1; display: block; border-radius: 12px; }
+.fill { grid-template-columns: 1fr; }
+.fillhead { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.banner { font-size: 13px; padding: 8px 12px; border-radius: 10px; background: var(--accent-soft); }
+.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 999px; font-size: 14px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="label">우쿨렐레 · 1년 목표</div>
+    <h1>크로매틱 5,000회</h1>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <section class="card counter" aria-label="오늘 카운터">
+    <div class="label">오늘</div>
+    <div class="big" id="today">0</div>
+    <div class="note" id="todayNote">하루 목표 15회</div>
+    <button class="plus" id="plus">+1 크로매틱</button>
+    <button class="minus" id="minus">잘못 눌렀어요 −1</button>
+  </section>
+
+  <section class="card" aria-labelledby="pTitle">
+    <h2 id="pTitle">목표 진행</h2>
+    <div class="bars" id="bars"></div>
+    <div class="pace" id="pace"></div>
+  </section>
+
+  <section class="card" aria-labelledby="wTitle">
+    <div class="row spread"><h2 id="wTitle">이번 주</h2><span class="note num" id="weekSum"></span></div>
+    <div class="week" id="week"></div>
+    <div class="note">15회를 채운 날은 진하게 표시돼요.</div>
+  </section>
+
+  <section class="card" aria-labelledby="cTitle">
+    <h2 id="cTitle">5,000회 그림 채우기</h2>
+    <div class="fill">
+      <div class="fillhead">
+        <div class="pct" id="pct">0<small>%</small></div>
+        <div class="note num" id="pctSub">0 / 5,000회</div>
+      </div>
+      <canvas class="art" id="art" role="img" aria-label="크로매틱 횟수만큼 조각이 채워지는 그림"></canvas>
+    </div>
+    <div class="note">10,000조각 · 1회마다 두 조각씩 칠해져요. 희미한 조각은 오늘까지 채웠으면 하는 곳이에요.</div>
+    <div class="row note">
+      <span>1년 시작일</span>
+      <input type="date" id="start" aria-label="1년 목표 시작일">
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(() => {
+  const GOAL = { day: 15, week: 100, year: 5000 };
+  const $ = id => document.getElementById(id);
+  const pad = n => String(n).padStart(2, "0");
+  const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const parse = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  const fmt = n => n.toLocaleString("ko-KR");
+  const ls = {
+    get(k, f) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : f; } catch { return f; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+  };
+
+  // 상태: { start: "YYYY-MM-DD", days: { "YYYY-MM-DD": 횟수 } }
+  let state = { start: ymd(new Date()), days: {} };
+  let save = async () => ls.set("chromatic", state);
+
+  function toast(msg) {
+    const t = $("toast"); t.textContent = msg; t.hidden = false;
+    clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 2200);
+  }
+
+  // ---------- 계산 ----------
+  function sums() {
+    const now = new Date(), today = ymd(now);
+    const mon = ymd(addDays(now, -((now.getDay() + 6) % 7)));
+    const start = state.start, end = ymd(addDays(parse(start), 364));
+    let d = 0, w = 0, y = 0;
+    for (const [k, v] of Object.entries(state.days)) {
+      if (k === today) d += v;
+      if (k >= mon && k <= today) w += v;
+      if (k >= start && k <= end) y += v;
+    }
+    return { d, w, y, today, mon };
+  }
+
+  // ---------- 그리기 ----------
+  function bar(label, v, goal) {
+    const full = v >= goal;
+    return `<span>${label}</span><div class="track"><i class="${full ? "full" : ""}" style="width:${Math.min(100, v / goal * 100)}%"></i></div>
+      <span class="num">${fmt(v)} / ${fmt(goal)}${full ? " ✓" : ""}</span>`;
+  }
+
+  function render() {
+    const s = sums();
+    $("today").textContent = s.d;
+    $("today").classList.toggle("done", s.d >= GOAL.day);
+    $("todayNote").textContent = s.d >= GOAL.day ? `하루 목표 ${GOAL.day}회 달성!` : `하루 목표까지 ${GOAL.day - s.d}회 남았어요`;
+    $("bars").innerHTML = bar("오늘", s.d, GOAL.day) + bar("이번 주", s.w, GOAL.week) + bar("1년", s.y, GOAL.year);
+
+    const elapsed = Math.min(365, Math.max(1, Math.round((parse(s.today) - parse(state.start)) / 864e5) + 1));
+    const expect = Math.round(GOAL.year * elapsed / 365);
+    const diff = s.y - expect;
+    $("pace").className = "pace " + (diff >= 0 ? "ahead" : "behind");
+    $("pace").textContent = `${elapsed}일째 · 예정 ${fmt(expect)}회보다 ${fmt(Math.abs(diff))}회 ${diff >= 0 ? "앞서 있어요" : "뒤처져 있어요"} · 남은 ${fmt(Math.max(0, GOAL.year - s.y))}회`;
+
+    // 이번 주 (월~일)
+    let h = "";
+    for (let i = 0; i < 7; i++) {
+      const k = ymd(addDays(parse(s.mon), i)), v = state.days[k] || 0;
+      const cls = v >= GOAL.day ? "hit" : v > 0 ? "some" : "";
+      h += `<div class="${k === s.today ? "is-today" : ""}"><b class="${cls}">${v || ""}</b>${"월화수목금토일"[i]}</div>`;
+    }
+    $("week").innerHTML = h;
+    $("weekSum").textContent = `${fmt(s.w)} / ${GOAL.week}회`;
+
+    drawAcc(s);
+    $("start").value = state.start;
+  }
+
+  // ---------- 그림: 100×100 조각이 정해진 순서로 칠해짐. 다 채우면 훌라 추는 아이와 우쿨렐레 치는 거북이 ----------
+  const N = 100, CELLS = N * N;
+  const PIX = (() => {
+    const S = 400, c = document.createElement("canvas"); c.width = c.height = S;
+    const g = c.getContext("2d");
+    let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const circle = (x, y, r, col) => { g.fillStyle = col; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); };
+    const oval = (x, y, rx, ry, col, rot = 0) => { g.fillStyle = col; g.beginPath(); g.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2); g.fill(); };
+    const stroke = (col, w) => { g.strokeStyle = col; g.lineWidth = w; g.lineCap = "round"; g.lineJoin = "round"; };
+    const flower = (x, y, r, petal, mid) => {
+      for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2 - Math.PI / 2; circle(x + Math.cos(a) * r * 0.62, y + Math.sin(a) * r * 0.62, r * 0.55, petal); }
+      circle(x, y, r * 0.28, mid);
+    };
+
+    // 배경: 파스텔 하늘, 해, 구름
+    const sky = g.createLinearGradient(0, 0, 0, 250);
+    sky.addColorStop(0, "#bfe9f7"); sky.addColorStop(1, "#fff1df");
+    g.fillStyle = sky; g.fillRect(0, 0, S, S);
+    circle(340, 72, 50, "rgba(255,222,140,.35)"); circle(340, 72, 34, "#ffd98a");
+    [[62, 78], [92, 68], [118, 80], [228, 52], [252, 44], [274, 54]].forEach(([x, y]) => circle(x, y, 18, "#ffffff"));
+    oval(90, 86, 44, 12, "#ffffff"); oval(252, 60, 40, 11, "#ffffff");
+    // 바다와 모래
+    g.fillStyle = "#8fd8de"; g.fillRect(0, 232, S, 50);
+    stroke("#c4eef0", 5); [[40, 248, 60], [170, 258, 50], [300, 246, 70]].forEach(([x, y, w]) => { g.beginPath(); g.moveTo(x, y); g.lineTo(x + w, y); g.stroke(); });
+    g.fillStyle = "#fbe3b6"; g.beginPath(); g.moveTo(0, 280);
+    for (let x = 0; x <= S; x += 20) g.quadraticCurveTo(x + 10, 272 + (x / 20 % 2) * 10, x + 20, 280);
+    g.lineTo(S, S); g.lineTo(0, S); g.fill();
+    [[60, 330], [210, 360], [350, 300], [120, 375]].forEach(([x, y]) => circle(x, y, 3, "#efc98c"));
+
+    // 음표
+    const note = (x, y, col) => {
+      oval(x, y, 8, 6, col, -0.4); stroke(col, 4);
+      g.beginPath(); g.moveTo(x + 7, y - 2); g.lineTo(x + 7, y - 30); g.quadraticCurveTo(x + 14, y - 24, x + 19, y - 16); g.stroke();
+    };
+    note(205, 150, "#8a6bb0"); note(232, 112, "#e8738f"); note(196, 96, "#5aa6b8");
+
+    // ---- 훌라 추는 아이 ----
+    const skin = "#f4c7a3", hair = "#3d2b2b";
+    // 머리카락(뒤)
+    circle(135, 150, 52, hair); g.fillStyle = hair; g.fillRect(85, 150, 100, 62);
+    // 팔 (양옆으로 물결치듯)
+    stroke(skin, 15);
+    g.beginPath(); g.moveTo(114, 214); g.quadraticCurveTo(84, 232, 58, 204); g.stroke();
+    g.beginPath(); g.moveTo(156, 214); g.quadraticCurveTo(188, 196, 212, 216); g.stroke();
+    circle(55, 200, 9, skin); circle(215, 219, 9, skin);
+    // 다리
+    g.fillStyle = skin; g.fillRect(117, 300, 13, 30); g.fillRect(141, 300, 13, 30);
+    oval(121, 333, 11, 6, skin); oval(150, 333, 11, 6, skin);
+    // 윗옷
+    g.fillStyle = "#ff8fab"; g.beginPath(); g.roundRect(108, 196, 54, 58, 14); g.fill();
+    // 풀치마
+    g.fillStyle = "#79c46a"; g.beginPath(); g.moveTo(104, 246); g.lineTo(166, 246); g.lineTo(188, 308); g.lineTo(82, 308); g.closePath(); g.fill();
+    stroke("#559e4c", 4);
+    for (let k = 0; k <= 8; k++) { const t = k / 8; g.beginPath(); g.moveTo(108 + t * 54, 252); g.lineTo(88 + t * 94, 306); g.stroke(); }
+    g.fillStyle = "#f7c948"; g.fillRect(102, 242, 66, 9);                       // 허리띠
+    // 얼굴
+    circle(135, 160, 42, skin);
+    oval(135, 122, 42, 20, hair);                                               // 앞머리
+    stroke(hair, 5);
+    g.beginPath(); g.arc(118, 163, 7, Math.PI, 0); g.stroke();                   // 웃는 눈
+    g.beginPath(); g.arc(152, 163, 7, Math.PI, 0); g.stroke();
+    oval(108, 178, 9, 5, "rgba(255,130,150,.55)"); oval(162, 178, 9, 5, "rgba(255,130,150,.55)");
+    stroke("#b24d48", 4); g.beginPath(); g.arc(135, 176, 7, 0.15 * Math.PI, 0.85 * Math.PI); g.stroke();
+    flower(174, 124, 22, "#ff5e87", "#ffd166");                                 // 머리 꽃
+    // 레이(꽃목걸이)
+    for (let k = 0; k <= 10; k++) {
+      const a = Math.PI * (0.12 + 0.76 * k / 10);
+      circle(135 + Math.cos(a) * 30, 194 + Math.sin(a) * 18, 7, ["#ffd166", "#ff6f91", "#ffffff"][k % 3]);
+    }
+
+    // ---- 우쿨렐레 치는 거북이 ----
+    oval(262, 322, 19, 11, "#8fdcb7"); oval(318, 322, 19, 11, "#8fdcb7");      // 발
+    oval(290, 268, 60, 58, "#4fb58d");                                          // 등딱지 테두리
+    [[246, 236], [334, 236], [240, 290], [340, 290]].forEach(([x, y]) => circle(x, y, 12, "#6fcaa3"));
+    oval(290, 274, 44, 46, "#f6e7bf");                                          // 배
+    stroke("#e3cc96", 4);
+    g.beginPath(); g.moveTo(256, 262); g.lineTo(324, 262); g.moveTo(258, 290); g.lineTo(322, 290); g.moveTo(290, 232); g.lineTo(290, 318); g.stroke();
+    circle(290, 186, 38, "#8fdcb7");                                            // 머리
+    circle(276, 184, 6, "#2c2c34"); circle(304, 184, 6, "#2c2c34");
+    circle(278, 182, 2.2, "#ffffff"); circle(306, 182, 2.2, "#ffffff");
+    oval(266, 198, 8, 5, "rgba(255,130,150,.5)"); oval(314, 198, 8, 5, "rgba(255,130,150,.5)");
+    stroke("#2c2c34", 3.5); g.beginPath(); g.arc(290, 194, 8, 0.2 * Math.PI, 0.8 * Math.PI); g.stroke();
+    flower(316, 158, 13, "#ffb347", "#ff6f91");                                 // 귀 옆 꽃
+    // 우쿨렐레 (비스듬히 안고 있음)
+    g.save(); g.translate(292, 282); g.rotate(-0.75);
+    g.fillStyle = "#7a4a24"; g.fillRect(-5, -82, 10, 58);                       // 넥
+    g.fillStyle = "#4a2a14"; g.beginPath(); g.roundRect(-8, -100, 16, 20, 4); g.fill();
+    circle(0, -14, 19, "#d0904e"); circle(0, 12, 24, "#d0904e");               // 몸통
+    oval(-7, 8, 8, 13, "#e3ad6f", -0.2);                                        // 반짝임
+    circle(0, -6, 7, "#4a2a14");                                                 // 사운드홀
+    g.fillStyle = "#4a2a14"; g.fillRect(-9, 22, 18, 5);                          // 브릿지
+    oval(-1, -58, 12, 9, "#8fdcb7");                                             // 넥 잡은 앞발
+    oval(16, 8, 13, 9, "#8fdcb7");                                               // 줄 튕기는 앞발
+    g.restore();
+
+    // 모래 위 꽃
+    flower(38, 352, 20, "#ff7a8a", "#ffd166"); flower(372, 356, 18, "#ffb347", "#ff6f91");
+    stroke("#5fae5a", 5); g.beginPath(); g.moveTo(58, 368); g.quadraticCurveTo(72, 350, 86, 360); g.stroke();
+    // 100×100으로 줄이며 색을 고르게 섞음
+    const small = document.createElement("canvas"); small.width = small.height = N;
+    const sg = small.getContext("2d"); sg.imageSmoothingEnabled = true; sg.imageSmoothingQuality = "high";
+    sg.drawImage(c, 0, 0, N, N);
+    const d = sg.getImageData(0, 0, N, N).data, out = new Uint8ClampedArray(CELLS * 3);
+    for (let i = 0; i < CELLS; i++) {
+      const n = (rnd() - 0.5) * 4;   // 아주 옅은 종이 질감
+      for (let k = 0; k < 3; k++) out[i * 3 + k] = d[i * 4 + k] + n;
+    }
+    return out;
+  })();
+  // 칠해지는 순서: 고정된 무작위 순서 (매번 같은 그림이 같은 순서로 드러남)
+  const ORDER = (() => {
+    const a = [...Array(CELLS).keys()]; let x = 20261004;
+    for (let i = a.length - 1; i > 0; i--) { x = (x * 1103515245 + 12345) % 2147483648; const j = x % (i + 1); [a[i], a[j]] = [a[j], a[i]]; }
+    const rank = new Array(CELLS); a.forEach((cell, k) => rank[cell] = k); return rank;
+  })();
+  const buf = (() => { const cv = document.createElement("canvas"); cv.width = cv.height = N; return { cv, ctx: cv.getContext("2d") }; })();
+  let lastShown = -1;
+  function drawAcc(s) {
+    const p = Math.min(100, s.y / GOAL.year * 100);
+    $("pct").innerHTML = `${p < 10 ? p.toFixed(1) : Math.floor(p)}<small>%</small>`;
+    $("pctSub").textContent = `${fmt(s.y)} / ${fmt(GOAL.year)}회`;
+    const done = Math.floor(Math.min(s.y, GOAL.year) / GOAL.year * CELLS);
+    const elapsed = Math.min(365, Math.max(1, Math.round((parse(s.today) - parse(state.start)) / 864e5) + 1));
+    const due = Math.floor(elapsed / 365 * CELLS);
+    const cv = $("art"), size = cv.clientWidth || 320, dpr = window.devicePixelRatio || 1;
+    const px = Math.round(size * dpr / N) * N || N * 3; if (cv.width !== px) { cv.width = cv.height = px; }
+    const g = cv.getContext("2d");
+    const hex = (getComputedStyle(document.documentElement).getPropertyValue("--track").trim() || "#e1eae7").replace("#", "");
+    const E = [0, 2, 4].map(k => parseInt(hex.slice(k, k + 2), 16));
+    // 100×100 픽셀 버퍼에 칠한 뒤 한 번에 확대해서 그림 (탭마다 빠르게)
+    const img = buf.ctx.createImageData(N, N), o = img.data;
+    for (let i = 0; i < CELLS; i++) {
+      const r = ORDER[i], a = r < done ? 1 : r < due ? 0.28 : 0;
+      for (let k = 0; k < 3; k++) o[i * 4 + k] = PIX[i * 3 + k] * a + E[k] * (1 - a);
+      o[i * 4 + 3] = 255;
+    }
+    buf.ctx.putImageData(img, 0, 0);
+    g.imageSmoothingEnabled = false;
+    g.drawImage(buf.cv, 0, 0, cv.width, cv.height);
+    if (lastShown >= 0 && done >= CELLS && lastShown < CELLS) toast("그림 완성! 크로매틱 5,000회 달성!");
+    lastShown = done;
+  }
+  window.addEventListener("resize", () => render());
+  matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => render());
+
+  // ---------- 조작 ----------
+  function change(n) {
+    const k = ymd(new Date());
+    const before = state.days[k] || 0;
+    const v = Math.max(0, before + n);
+    if (v === before) return;
+    if (v) state.days[k] = v; else delete state.days[k];
+    render(); queueSave();
+    if (n > 0 && v === GOAL.day) toast(`오늘 ${GOAL.day}회 달성!`);
+    const s = sums();
+    if (n > 0 && s.w === GOAL.week) toast(`이번 주 ${GOAL.week}회 달성!`);
+  }
+  $("plus").onclick = () => change(1);
+  $("minus").onclick = () => change(-1);
+  $("start").onchange = () => { if ($("start").value) { state.start = $("start").value; render(); queueSave(); } };
+
+  // 연타해도 한 번에 묶어서 저장
+  let timer = null, saving = false, again = false;
+  function queueSave() { clearTimeout(timer); timer = setTimeout(flush, 700); }
+  async function flush() {
+    timer = null;
+    if (saving) { again = true; return; }
+    saving = true;
+    try { await save(); } catch { toast("저장하지 못했어요. 잠시 후 다시 눌러 보세요."); }
+    saving = false;
+    if (again) { again = false; flush(); }
+  }
+
+  // ---------- 저장소: 계정(db) → 쓸 수 없으면 이 기기 브라우저 ----------
+  // 링크로 들어온 다른 사람도 쓸 수 있게: 계정에 저장할 권한이 없으면 각자 자기 폰에 저장
+  const localSave = async () => ls.set("chromatic", state);
+  const banner = msg => { const b = $("banner"); b.textContent = msg; b.hidden = !msg; };
+  const LOCAL_MSG = "이 기기의 브라우저에 저장돼요. 같은 폰, 같은 브라우저로 열면 이어서 셀 수 있어요.";
+  let unsub = null;
+  function goLocal() {
+    if (unsub) { unsub(); unsub = null; }
+    save = localSave; ls.set("chromatic", state); banner(LOCAL_MSG);
+  }
+  state = ls.get("chromatic", state);
+  render();
+  (async () => {
+    const [db, user] = window.claude?.use ? await Promise.all([claude.use("db"), claude.use("user")]) : [null, null];
+    const uid = user ? await user.id() : null;
+    const canWrite = user ? await user.can("data.write") : null;
+    if (!db || !uid || canWrite === false) { goLocal(); return; }
+    const ref = db.doc(`data/users/${uid}/chromatic`);
+    save = async () => {
+      try { await ref.set({ start: state.start, days: state.days }); }
+      catch (e) {
+        if (e?.code === "invalid_argument" || e?.code === "not_granted" || e?.code === "revoked") { goLocal(); return; }
+        throw e;
+      }
+    };
+    unsub = ref.onSnapshot(snap => {
+      if (snap.metadata.hasPendingWrites || timer || saving) return; // 저장 대기 중인 탭이 있으면 화면 값을 유지
+      if (snap.exists) { const d = snap.data(); state = { start: d.start || state.start, days: { ...(d.days || {}) } }; render(); }
+      else if (Object.keys(state.days).length) flush(); // 이 기기에 있던 기록을 계정으로 옮김
+    }, () => goLocal());
+  })();
+})();
+</script>
+
+</body>
+</html>
