@@ -194,22 +194,6 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
 
   <div id="banner" class="banner" hidden></div>
 
-  <section class="card counter" aria-label="오늘 카운터">
-    <div class="label">오늘</div>
-    <div class="big" id="today">0</div>
-    <div class="note" id="todayNote">하루 목표 15회</div>
-    <div class="todaytimes" id="todayTimes"></div>
-    <button class="plus" id="plus">+1 크로매틱</button>
-    <div class="subrow">
-      <button class="minus" id="minus">잘못 눌렀어요 −1</button>
-      <button class="sndbtn" id="tapSnd" aria-pressed="true">🔔 소리 켜짐</button>
-    </div>
-    <label class="field" style="width:100%;text-align:left;display:grid;gap:4px">
-      <span class="note">오늘 연습 메모</span>
-      <textarea id="todayMemo" maxlength="500" placeholder="예: 3프렛부터 손가락 꼬임. 80 BPM에서 깔끔하게 됨"></textarea>
-    </label>
-  </section>
-
   <section class="card metro" aria-labelledby="mTitle">
     <div class="row spread">
       <h2 id="mTitle">메트로놈</h2>
@@ -239,6 +223,22 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
       <input type="range" id="vol" min="10" max="100" value="90" aria-label="메트로놈 음량" style="flex:1;min-width:120px">
     </div>
     <div class="note">소리가 작으면 핸드폰 볼륨 버튼도 올려 주세요.</div>
+  </section>
+
+  <section class="card counter" aria-label="오늘 카운터">
+    <div class="label">오늘</div>
+    <div class="big" id="today">0</div>
+    <div class="note" id="todayNote">하루 목표 15회</div>
+    <div class="todaytimes" id="todayTimes"></div>
+    <button class="plus" id="plus">+1 크로매틱</button>
+    <div class="subrow">
+      <button class="minus" id="minus">잘못 눌렀어요 −1</button>
+      <button class="sndbtn" id="tapSnd" aria-pressed="true">🔔 소리 켜짐</button>
+    </div>
+    <label class="field" style="width:100%;text-align:left;display:grid;gap:4px">
+      <span class="note">오늘 연습 메모</span>
+      <textarea id="todayMemo" maxlength="500" placeholder="예: 3프렛부터 손가락 꼬임. 80 BPM에서 깔끔하게 됨"></textarea>
+    </label>
   </section>
 
   <section class="card" aria-labelledby="pTitle">
@@ -809,15 +809,38 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
       nextT += 60 / bpmVal(); beat++;
     }
   }
-  $("metroBtn").onclick = async () => {
+  // 다른 앱에 다녀오면 아이폰이 소리 장치를 멈춰 두는 경우가 있어서, 그럴 땐 새로 만들어 깨움
+  function resetAudio() { try { if (ac) ac.close(); } catch {} ac = null; master = null; fx = null; }
+  async function ensureAudio() {
+    if (ac && (ac.state === "closed" || ac.state === "interrupted")) resetAudio();
     if (!ac) setupAudio();
-    await ac.resume();
-    metroOn = !metroOn;
-    $("metroBtn").classList.toggle("on", metroOn);
-    $("metroBtn").textContent = metroOn ? "■ 정지" : "▶ 시작";
-    if (metroOn) { beat = 0; nextT = ac.currentTime + 0.06; metroTimer = setInterval(schedule, 25); }
-    else { clearInterval(metroTimer); [...$("beats").children].forEach(el => el.classList.remove("on")); }
-  };
+    if (ac.state !== "running") { try { await ac.resume(); } catch {} }
+    if (ac.state !== "running") {                       // 그래도 안 깨어나면 새로 만듦
+      resetAudio(); setupAudio();
+      try { await ac.resume(); } catch {}
+    }
+  }
+  function stopMetro() {
+    metroOn = false; clearInterval(metroTimer); metroTimer = null;
+    $("metroBtn").classList.remove("on"); $("metroBtn").textContent = "▶ 시작";
+    [...$("beats").children].forEach(el => el.classList.remove("on"));
+  }
+  async function startMetro() {
+    await ensureAudio();
+    metroOn = true; beat = 0; nextT = ac.currentTime + 0.06;
+    clearInterval(metroTimer); metroTimer = setInterval(schedule, 25);
+    $("metroBtn").classList.add("on"); $("metroBtn").textContent = "■ 정지";
+  }
+  $("metroBtn").onclick = () => { metroOn ? stopMetro() : startMetro(); };
+  // 다른 앱으로 넘어가면 메트로놈을 멈추고, 돌아와서 시작을 누르면 다시 정상으로 울림
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      if (metroOn) { stopMetro(); resumeHint = true; }
+    } else if (resumeHint) {
+      resumeHint = false; toast("메트로놈이 멈췄어요. ▶ 시작을 누르면 다시 울려요");
+    }
+  });
+  let resumeHint = false;
 
   // ---------- 연습 시간대 ----------
   const PERIODS = [
@@ -970,8 +993,9 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     return (fx = out);
   }
   function chime(freq, vol = 0.5, when = 0) {
+    if (ac && (ac.state === "closed" || ac.state === "interrupted")) resetAudio();
     if (!ac) setupAudio();
-    if (ac.state !== "running") ac.resume();
+    if (ac.state !== "running") ac.resume().catch(() => {});
     const t = ac.currentTime + 0.01 + when, out = chimeOut();
     // 유리 종(첼레스타) 같은 맑은 소리: 깨끗한 정수배 배음만, 높은 배음은 아주 빨리 사라짐
     [[1, 1, 0.8], [2.0, 0.3, 0.35], [3.0, 0.12, 0.15], [4.0, 0.06, 0.07]].forEach(([m, a, d]) => {
