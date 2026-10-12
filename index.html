@@ -811,12 +811,17 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
   }
   // 다른 앱에 다녀오면 아이폰이 소리 장치를 멈춰 두는 경우가 있어서, 그럴 땐 새로 만들어 깨움
   function resetAudio() { try { if (ac) ac.close(); } catch {} ac = null; master = null; fx = null; }
+  // 아이폰은 누른 순간에 소리를 한 번 내 줘야 소리 장치가 확실히 깨어나요 (아주 짧은 무음)
+  function unlockAudio() {
+    try { const b = ac.createBuffer(1, 1, ac.sampleRate), src = ac.createBufferSource(); src.buffer = b; src.connect(ac.destination); src.start(0); } catch {}
+  }
   async function ensureAudio() {
     if (ac && (ac.state === "closed" || ac.state === "interrupted")) resetAudio();
     if (!ac) setupAudio();
+    unlockAudio();
     if (ac.state !== "running") { try { await ac.resume(); } catch {} }
     if (ac.state !== "running") {                       // 그래도 안 깨어나면 새로 만듦
-      resetAudio(); setupAudio();
+      resetAudio(); setupAudio(); unlockAudio();
       try { await ac.resume(); } catch {}
     }
   }
@@ -836,11 +841,15 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") {
       if (metroOn) { stopMetro(); resumeHint = true; }
+      // 카톡 등 다른 앱이 소리 장치를 가져가면, 돌아와서도 겉보기만 '켜짐'인 채 소리가 안 나는 경우가 있어서
+      // 나갈 때 소리 장치를 완전히 닫고, 돌아와서 누를 때 새로 만들어요
+      resetAudio();
     } else if (resumeHint) {
       resumeHint = false; toast("메트로놈이 멈췄어요. ▶ 시작을 누르면 다시 울려요");
     }
   });
   let resumeHint = false;
+  addEventListener("pagehide", () => { if (metroOn) stopMetro(); resetAudio(); });
 
   // ---------- 연습 시간대 ----------
   const PERIODS = [
@@ -995,6 +1004,7 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
   function chime(freq, vol = 0.5, when = 0) {
     if (ac && (ac.state === "closed" || ac.state === "interrupted")) resetAudio();
     if (!ac) setupAudio();
+    unlockAudio();
     if (ac.state !== "running") ac.resume().catch(() => {});
     const t = ac.currentTime + 0.01 + when, out = chimeOut();
     // 유리 종(첼레스타) 같은 맑은 소리: 깨끗한 정수배 배음만, 높은 배음은 아주 빨리 사라짐
