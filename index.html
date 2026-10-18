@@ -229,6 +229,7 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     <div class="label">오늘</div>
     <div class="big" id="today">0</div>
     <div class="note" id="todayNote">하루 목표 15회</div>
+    <div class="note" id="todayWhy" style="font-size:12px"></div>
     <div class="todaytimes" id="todayTimes"></div>
     <button class="plus" id="plus">+1 크로매틱</button>
     <div class="subrow">
@@ -249,8 +250,9 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
 
   <section class="card" aria-labelledby="wTitle">
     <div class="row spread"><h2 id="wTitle">이번 주</h2><span class="note num" id="weekSum"></span></div>
+    <div class="note" id="wRange"></div>
     <div class="week" id="week"></div>
-    <div class="note">15회를 채운 날은 진하게 표시돼요.</div>
+    <div class="note">그날 목표(이번 주 남은 횟수 ÷ 남은 날)를 채운 날은 진하게 표시돼요.</div>
   </section>
 
   <section class="card" aria-labelledby="calTitle">
@@ -384,9 +386,22 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     }
     return { d, w, y, today, mon };
   }
+  // 월요일 시작 한 주. 하루 목표 = (주간 목표 − 이번 주 그날 전까지 한 횟수) ÷ 그날 포함 남은 날 수
+  const mondayOf = k => ymd(addDays(parse(k), -((parse(k).getDay() + 6) % 7)));
+  function dayGoal(k) {
+    const mon = mondayOf(k), idx = (parse(k).getDay() + 6) % 7;
+    let before = 0;
+    for (let i = 0; i < idx; i++) before += state.days[ymd(addDays(parse(mon), i))] || 0;
+    return Math.max(0, Math.ceil((GOAL.week - before) / (7 - idx)));
+  }
+  const metGoal = (k, v) => { const g = dayGoal(k); return g > 0 ? v >= g : v > 0; };
+  // 1년 도전의 몇 주차인지 (시작일이 들어 있는 주 = 1주차, 월요일 기준)
+  const weekNo = k => Math.floor((parse(mondayOf(k)) - parse(mondayOf(state.start))) / (7 * 864e5)) + 1;
+  const totalWeeks = () => weekNo(ymd(addDays(parse(state.start), 364)));
 
   // ---------- 그리기 ----------
   function bar(label, v, goal) {
+    if (goal <= 0) return `<span>${label}</span><div class="track"><i class="full" style="width:100%"></i></div><span class="num">${fmt(v)}회 · 보너스</span>`;
     const full = v >= goal;
     return `<span>${label}</span><div class="track"><i class="${full ? "full" : ""}" style="width:${Math.min(100, v / goal * 100)}%"></i></div>
       <span class="num">${fmt(v)} / ${fmt(goal)}${full ? " ✓" : ""}</span>`;
@@ -395,25 +410,33 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
   function render() {
     const s = sums();
     $("today").textContent = s.d;
-    $("today").classList.toggle("done", s.d >= GOAL.day);
-    $("todayNote").textContent = s.d >= GOAL.day ? `하루 목표 ${GOAL.day}회 달성!` : `하루 목표까지 ${GOAL.day - s.d}회 남았어요`;
-    $("bars").innerHTML = bar("오늘", s.d, GOAL.day) + bar("이번 주", s.w, GOAL.week) + bar("1년", s.y, GOAL.year);
+    const tg = dayGoal(s.today), wLeft = 7 - (parse(s.today).getDay() + 6) % 7, wBefore = s.w - s.d;
+    $("today").classList.toggle("done", tg === 0 || s.d >= tg);
+    $("todayNote").textContent = tg === 0 ? `이번 주 ${GOAL.week}회를 이미 채웠어요! 오늘은 보너스예요`
+      : s.d >= tg ? `오늘 목표 ${tg}회 달성!` : `오늘 목표 ${tg}회 · ${tg - s.d}회 남았어요`;
+    $("todayWhy").textContent = tg === 0 ? "" : `이번 주 남은 ${fmt(Math.max(0, GOAL.week - wBefore))}회 ÷ 오늘 포함 ${wLeft}일 = 하루 ${tg}회`;
+    $("bars").innerHTML = bar("오늘", s.d, tg) + bar("이번 주", s.w, GOAL.week) + bar("1년", s.y, GOAL.year);
 
     const elapsed = Math.min(365, Math.max(1, Math.round((parse(s.today) - parse(state.start)) / 864e5) + 1));
     const expect = Math.round(GOAL.year * elapsed / 365);
     const diff = s.y - expect;
     $("pace").className = "pace " + (diff >= 0 ? "ahead" : "behind");
-    $("pace").textContent = `${elapsed}일째 · 예정 ${fmt(expect)}회보다 ${fmt(Math.abs(diff))}회 ${diff >= 0 ? "앞서 있어요" : "뒤처져 있어요"} · 남은 ${fmt(Math.max(0, GOAL.year - s.y))}회`;
+    const remain = Math.max(0, GOAL.year - s.y), wk = weekNo(s.today), tw = totalWeeks(), wksLeft = Math.max(1, tw - wk + 1);
+    $("pace").textContent = `${wk}주차 · ${elapsed}일째 · 예정 ${fmt(expect)}회보다 ${fmt(Math.abs(diff))}회 ${diff >= 0 ? "앞서 있어요" : "뒤처져 있어요"} · 남은 ${fmt(remain)}회`
+      + (remain ? ` (이번 주 포함 ${wksLeft}주, 주마다 평균 ${fmt(Math.ceil(remain / wksLeft))}회면 돼요)` : "");
 
     // 이번 주 (월~일)
     let h = "";
     for (let i = 0; i < 7; i++) {
       const k = ymd(addDays(parse(s.mon), i)), v = state.days[k] || 0;
-      const cls = v >= GOAL.day ? "hit" : v > 0 ? "some" : "";
+      const cls = v > 0 && metGoal(k, v) ? "hit" : v > 0 ? "some" : "";
       h += `<div class="${k === s.today ? "is-today" : ""}"><b class="${cls}">${v || ""}</b>${"월화수목금토일"[i]}</div>`;
     }
     $("week").innerHTML = h;
     $("weekSum").textContent = `${fmt(s.w)} / ${GOAL.week}회`;
+    const sun = addDays(parse(s.mon), 6);
+    $("wTitle").textContent = `${weekNo(s.today)}주차`;
+    $("wRange").textContent = `${parse(s.mon).getMonth() + 1}/${parse(s.mon).getDate()}(월) ~ ${sun.getMonth() + 1}/${sun.getDate()}(일) · 전체 ${totalWeeks()}주`;
 
     drawAcc(s);
     drawCal(s);
@@ -586,8 +609,9 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     let sum = 0, hit = 0;
     for (let d = 1; d <= n; d++) {
       const k = `${y}-${pad(mo + 1)}-${pad(d)}`, v = state.days[k] || 0;
-      sum += v; if (v >= GOAL.day) hit++;
-      const cls = [v >= GOAL.day ? "hit" : v > 0 ? "some" : "", k === s.today ? "today" : "", k > s.today ? "future" : ""].join(" ");
+      const ok = v > 0 && metGoal(k, v);
+      sum += v; if (ok) hit++;
+      const cls = [ok ? "hit" : v > 0 ? "some" : "", k === s.today ? "today" : "", k > s.today ? "future" : ""].join(" ");
       const tap = k <= s.today ? ` tap" data-k="${k}" role="button" tabindex="0" aria-label="${mo + 1}월 ${d}일 ${v}회` : "";
       h += `<div class="${cls}${state.notes[k] ? " memo" : ""}${k === editKey ? " sel" : ""}${tap}" title="${k} · ${v}회"><span class="d">${d}</span><span class="n">${v || ""}</span></div>`;
     }
@@ -943,9 +967,12 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     let streak = 0; const d = new Date(); if (!state.days[ymd(d)]) d.setDate(d.getDate() - 1);
     while (state.days[ymd(d)]) { streak++; d.setDate(d.getDate() - 1); }
     const parts = [];
-    if (s.d >= GOAL.day) parts.push(`오늘 목표 ${GOAL.day}회를 벌써 채웠어요`);
-    else if (s.d > 0) parts.push(`오늘 ${s.d}회, ${GOAL.day - s.d}회 남았어요`);
-    else parts.push(`오늘의 목표는 ${GOAL.day}회예요`);
+    const tg = dayGoal(s.today);
+    parts.push(`${weekNo(s.today)}주차`);
+    if (tg === 0) parts.push(`이번 주 ${GOAL.week}회 달성, 오늘은 보너스`);
+    else if (s.d >= tg) parts.push(`오늘 목표 ${tg}회를 벌써 채웠어요`);
+    else if (s.d > 0) parts.push(`오늘 ${s.d}회, ${tg - s.d}회 남았어요`);
+    else parts.push(`오늘의 목표는 ${tg}회예요`);
     if (streak >= 2) parts.push(`${streak}일 연속 연습 중`);
     parts.push(`5,000회까지 ${fmt(Math.max(0, GOAL.year - s.y))}회`);
     $("helloStat").textContent = parts.join(" · ");
@@ -984,7 +1011,8 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     }
     if (!list.length) delete state.sessions[k];
     render(); queueSave();
-    if (n > 0 && v === GOAL.day) toast(`오늘 ${GOAL.day}회 달성!`);
+    const tgNow = dayGoal(k);
+    if (n > 0 && tgNow > 0 && v === tgNow) toast(`오늘 목표 ${tgNow}회 달성!`);
     const s = sums();
     if (n > 0 && s.w === GOAL.week) toast(`이번 주 ${GOAL.week}회 달성!`);
   }
@@ -1024,7 +1052,8 @@ textarea { font: inherit; color: inherit; background: var(--bg); border: 1px sol
     if (!tapOn) return;
     try {
       if (n < 0) { chime(hz(-5), 0.35); return; }
-      if (v === GOAL.day) { [7, 0, 4, 9, 12].forEach((x, i) => chime(hz(x), 0.5, i * 0.09)); return; }   // 하루 목표: 개방현을 차례로 튕기듯
+      const tgS = dayGoal(ymd(new Date()));
+      if (tgS > 0 && v === tgS) { [7, 0, 4, 9, 12].forEach((x, i) => chime(hz(x), 0.5, i * 0.09)); return; }   // 하루 목표: 개방현을 차례로 튕기듯
       chime(hz(OPEN[(v - 1) % OPEN.length]), 0.6);
     } catch {}
   }
